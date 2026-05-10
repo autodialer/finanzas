@@ -5,9 +5,14 @@
 @section('contenido')
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h4>Clientes</h4>
-    <a href="{{ route('clientes.create') }}" class="btn btn-primary btn-sm">
-        <i class="bi bi-plus-lg"></i> Nuevo
-    </a>
+    <div class="d-flex gap-2">
+        <a href="{{ route('clientes.import.form') }}" class="btn btn-success btn-sm">
+            <i class="bi bi-file-earmark-arrow-up"></i> Importar CSV
+        </a>
+        <a href="{{ route('clientes.create') }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-lg"></i> Nuevo
+        </a>
+    </div>
 </div>
 
 <div class="card">

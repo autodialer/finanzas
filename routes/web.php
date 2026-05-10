@@ -29,7 +29,12 @@ Route::middleware('auth')->group(function () {
     Route::resource('bancos', BancoController::class);
     Route::resource('cuentas', CuentaController::class);
     Route::resource('proveedores', ProveedorController::class);
+    Route::get('proveedores-importar', [ProveedorController::class, 'importForm'])->name('proveedores.import.form');
+    Route::post('proveedores-importar', [ProveedorController::class, 'import'])->name('proveedores.import');
+
     Route::resource('clientes', ClienteController::class);
+    Route::get('clientes-importar', [ClienteController::class, 'importForm'])->name('clientes.import.form');
+    Route::post('clientes-importar', [ClienteController::class, 'import'])->name('clientes.import');
     Route::resource('ingresos', IngresoController::class);
     Route::resource('gastos', GastoController::class);
 });
