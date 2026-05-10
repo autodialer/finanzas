@@ -98,6 +98,18 @@
                         <i class="bi bi-credit-card me-2"></i>Cuentas
                     </a>
                 </nav>
+
+                <div class="mt-auto pt-3 border-top border-secondary">
+                    <p class="text-muted small mb-1 px-2">
+                        <i class="bi bi-person-circle me-1"></i>{{ auth()->user()->name }}
+                    </p>
+                    <form method="POST" action="{{ route('logout') }}">
+                        @csrf
+                        <button type="submit" class="btn btn-sm btn-outline-secondary w-100">
+                            <i class="bi bi-box-arrow-left me-1"></i>Cerrar sesión
+                        </button>
+                    </form>
+                </div>
             </div>
 
             <!-- Contenido principal -->
