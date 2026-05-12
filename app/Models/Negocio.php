@@ -33,4 +33,14 @@ class Negocio extends Model
     {
         return $this->hasMany(Gasto::class);
     }
+
+    public function empleados()
+    {
+        return $this->hasMany(Empleado::class);
+    }
+
+    public function periodosNomina()
+    {
+        return $this->hasMany(PeriodoNomina::class);
+    }
 }

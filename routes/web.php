@@ -13,6 +13,8 @@ use App\Http\Controllers\NegocioController;
 use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\ReporteController;
 use App\Http\Controllers\VendedorController;
+use App\Http\Controllers\EmpleadoController;
+use App\Http\Controllers\PeriodoNominaController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
@@ -37,4 +39,9 @@ Route::middleware('auth')->group(function () {
     Route::post('clientes-importar', [ClienteController::class, 'import'])->name('clientes.import');
     Route::resource('ingresos', IngresoController::class);
     Route::resource('gastos', GastoController::class);
+
+    Route::resource('empleados', EmpleadoController::class);
+    Route::resource('nominas', PeriodoNominaController::class)->except(['edit', 'update']);
+    Route::patch('nominas/{nomina}/cerrar', [PeriodoNominaController::class, 'cerrar'])->name('nominas.cerrar');
+    Route::patch('nominas/linea/{linea}', [PeriodoNominaController::class, 'updateNomina'])->name('nominas.linea.update');
 });

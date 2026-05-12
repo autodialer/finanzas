@@ -71,6 +71,16 @@
                     </a>
                 </nav>
 
+                <div class="nav-header mb-2">Nómina</div>
+                <nav class="nav flex-column mb-3">
+                    <a href="{{ route('nominas.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('nominas*') ? 'active' : '' }}">
+                        <i class="bi bi-cash-stack me-2"></i>Nóminas
+                    </a>
+                    <a href="{{ route('empleados.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('empleados*') ? 'active' : '' }}">
+                        <i class="bi bi-person-vcard me-2"></i>Empleados
+                    </a>
+                </nav>
+
                 <div class="nav-header mb-2">Catálogos</div>
                 <nav class="nav flex-column mb-3">
                     <a href="{{ route('negocios.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('negocios*') ? 'active' : '' }}">
@@ -127,6 +137,8 @@
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('ingresos.index') }}">Ingresos</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('gastos.index') }}">Gastos</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('reportes.index') }}">Reportes</a></li>
+                                <li class="nav-item"><a class="nav-link text-white" href="{{ route('nominas.index') }}">Nóminas</a></li>
+                                <li class="nav-item"><a class="nav-link text-white" href="{{ route('empleados.index') }}">Empleados</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('negocios.index') }}">Negocios</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('areas.index') }}">Áreas</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('categorias.index') }}">Categorías</a></li>
