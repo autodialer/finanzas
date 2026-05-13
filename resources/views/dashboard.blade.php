@@ -50,6 +50,62 @@
     </div>
 </div>
 
+<!-- Tarjetas IVA -->
+<div class="row mb-4">
+    <div class="col-md-4 mb-3">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-muted small">IVA cobrado (ingresos)</div>
+                        <div class="fs-4 fw-bold text-success">${{ number_format($ivaCobradomMes, 2) }}</div>
+                        <div class="text-muted" style="font-size:0.75rem">IVA trasladado a clientes</div>
+                    </div>
+                    <i class="bi bi-receipt fs-1 text-success opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-muted small">IVA pagado (gastos)</div>
+                        <div class="fs-4 fw-bold text-danger">${{ number_format($ivaPagadoMes, 2) }}</div>
+                        <div class="text-muted" style="font-size:0.75rem">IVA acreditable de proveedores</div>
+                    </div>
+                    <i class="bi bi-receipt-cutoff fs-1 text-danger opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card border-0 shadow-sm {{ $saldoIva > 0 ? 'border-warning' : '' }}">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-muted small">Saldo IVA con SAT</div>
+                        <div class="fs-4 fw-bold {{ $saldoIva > 0 ? 'text-warning' : 'text-success' }}">
+                            ${{ number_format(abs($saldoIva), 2) }}
+                        </div>
+                        <div class="small {{ $saldoIva > 0 ? 'text-warning' : 'text-success' }}">
+                            @if($saldoIva > 0)
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i>A pagar al SAT
+                            @elseif($saldoIva < 0)
+                                <i class="bi bi-check-circle-fill me-1"></i>A favor tuyo
+                            @else
+                                <i class="bi bi-dash-circle me-1"></i>Sin saldo
+                            @endif
+                        </div>
+                    </div>
+                    <i class="bi bi-bank2 fs-1 {{ $saldoIva > 0 ? 'text-warning' : 'text-success' }} opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Resumen por negocio -->
 <div class="row mb-4">
     <div class="col-md-6 mb-3">

@@ -24,6 +24,16 @@ class DashboardController extends Controller
 
         $balanceMes = $totalIngresosMes - $totalGastosMes;
 
+        $ivaCobradomMes = Ingreso::whereMonth('fecha', $mesActual)
+            ->whereYear('fecha', $anioActual)
+            ->sum('monto_iva');
+
+        $ivaPagadoMes = Gasto::whereMonth('fecha', $mesActual)
+            ->whereYear('fecha', $anioActual)
+            ->sum('monto_iva');
+
+        $saldoIva = $ivaCobradomMes - $ivaPagadoMes;
+
         $ingresosPorNegocio = Negocio::withSum(['ingresos' => function ($q) use ($mesActual, $anioActual) {
             $q->whereMonth('fecha', $mesActual)->whereYear('fecha', $anioActual);
         }], 'monto')->get();
@@ -54,6 +64,9 @@ class DashboardController extends Controller
             'totalIngresosMes',
             'totalGastosMes',
             'balanceMes',
+            'ivaCobradomMes',
+            'ivaPagadoMes',
+            'saldoIva',
             'ingresosPorNegocio',
             'gastosPorNegocio',
             'ultimosMovimientos'
