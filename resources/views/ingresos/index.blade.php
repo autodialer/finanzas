@@ -23,7 +23,9 @@
                     <th>Concepto</th>
                     <th>Forma Pago</th>
                     <th>Cuenta</th>
-                    <th class="text-end">Monto</th>
+                    <th class="text-end">Subtotal</th>
+                    <th class="text-end">IVA</th>
+                    <th class="text-end">Total</th>
                     <th>Acciones</th>
                 </tr>
             </thead>
@@ -46,6 +48,12 @@
                         @endif
                     </td>
                     <td>{{ $ingreso->cuenta->nombre }}</td>
+                    <td class="text-end text-muted">
+                        @if($ingreso->tiene_iva) ${{ number_format($ingreso->monto_base, 2) }} @else - @endif
+                    </td>
+                    <td class="text-end text-success small">
+                        @if($ingreso->tiene_iva) ${{ number_format($ingreso->monto_iva, 2) }} @else - @endif
+                    </td>
                     <td class="text-end text-success fw-bold">${{ number_format($ingreso->monto, 2) }}</td>
                     <td>
                         <a href="{{ route('ingresos.edit', $ingreso) }}" class="btn btn-sm btn-warning">
@@ -61,14 +69,16 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="10" class="text-center text-muted">Sin registros</td>
+                    <td colspan="11" class="text-center text-muted">Sin registros</td>
                 </tr>
                 @endforelse
             </tbody>
             @if($ingresos->count() > 0)
             <tfoot class="table-light">
                 <tr>
-                    <td colspan="8" class="text-end fw-bold">Total:</td>
+                    <td colspan="8" class="text-end fw-bold">Totales:</td>
+                    <td class="text-end text-muted fw-bold">${{ number_format($ingresos->sum('monto') - $ingresos->sum('monto_iva'), 2) }}</td>
+                    <td class="text-end text-success fw-bold">${{ number_format($ingresos->sum('monto_iva'), 2) }}</td>
                     <td class="text-end fw-bold text-success">${{ number_format($ingresos->sum('monto'), 2) }}</td>
                     <td></td>
                 </tr>

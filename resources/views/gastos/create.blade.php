@@ -21,10 +21,10 @@
                     @error('fecha') <div class="text-danger small">{{ $message }}</div> @enderror
                 </div>
                 <div class="col-md-6 mb-3">
-                    <label class="form-label">Monto</label>
+                    <label class="form-label">Monto total</label>
                     <div class="input-group">
                         <span class="input-group-text">$</span>
-                        <input type="number" step="0.01" name="monto" class="form-control" value="{{ old('monto') }}">
+                        <input type="number" step="0.01" name="monto" id="monto" class="form-control" value="{{ old('monto') }}" oninput="actualizarIva()">
                     </div>
                     @error('monto') <div class="text-danger small">{{ $message }}</div> @enderror
                 </div>
@@ -33,9 +33,7 @@
                     <select name="negocio_id" class="form-select">
                         <option value="">Selecciona un negocio</option>
                         @foreach($negocios as $negocio)
-                        <option value="{{ $negocio->id }}" {{ old('negocio_id') == $negocio->id ? 'selected' : '' }}>
-                            {{ $negocio->nombre }}
-                        </option>
+                        <option value="{{ $negocio->id }}" {{ old('negocio_id') == $negocio->id ? 'selected' : '' }}>{{ $negocio->nombre }}</option>
                         @endforeach
                     </select>
                     @error('negocio_id') <div class="text-danger small">{{ $message }}</div> @enderror
@@ -45,9 +43,7 @@
                     <select name="area_id" class="form-select">
                         <option value="">Sin área</option>
                         @foreach($areas as $area)
-                        <option value="{{ $area->id }}" {{ old('area_id') == $area->id ? 'selected' : '' }}>
-                            {{ $area->negocio->nombre }} — {{ $area->nombre }}
-                        </option>
+                        <option value="{{ $area->id }}" {{ old('area_id') == $area->id ? 'selected' : '' }}>{{ $area->negocio->nombre }} — {{ $area->nombre }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -56,9 +52,7 @@
                     <select name="categoria_id" class="form-select">
                         <option value="">Selecciona una categoría</option>
                         @foreach($categorias as $categoria)
-                        <option value="{{ $categoria->id }}" {{ old('categoria_id') == $categoria->id ? 'selected' : '' }}>
-                            {{ $categoria->nombre }}
-                        </option>
+                        <option value="{{ $categoria->id }}" {{ old('categoria_id') == $categoria->id ? 'selected' : '' }}>{{ $categoria->nombre }}</option>
                         @endforeach
                     </select>
                     @error('categoria_id') <div class="text-danger small">{{ $message }}</div> @enderror
@@ -68,9 +62,7 @@
                     <select name="proveedor_id" class="form-select">
                         <option value="">Sin proveedor</option>
                         @foreach($proveedores as $proveedor)
-                        <option value="{{ $proveedor->id }}" {{ old('proveedor_id') == $proveedor->id ? 'selected' : '' }}>
-                            {{ $proveedor->nombre }}
-                        </option>
+                        <option value="{{ $proveedor->id }}" {{ old('proveedor_id') == $proveedor->id ? 'selected' : '' }}>{{ $proveedor->nombre }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -79,16 +71,14 @@
                     <select name="cuenta_id" class="form-select">
                         <option value="">Selecciona una cuenta</option>
                         @foreach($cuentas as $cuenta)
-                        <option value="{{ $cuenta->id }}" {{ old('cuenta_id') == $cuenta->id ? 'selected' : '' }}>
-                            {{ $cuenta->negocio->nombre }} — {{ $cuenta->nombre }}
-                        </option>
+                        <option value="{{ $cuenta->id }}" {{ old('cuenta_id') == $cuenta->id ? 'selected' : '' }}>{{ $cuenta->negocio->nombre }} — {{ $cuenta->nombre }}</option>
                         @endforeach
                     </select>
                     @error('cuenta_id') <div class="text-danger small">{{ $message }}</div> @enderror
                 </div>
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Forma de Pago</label>
-                    <select name="forma_pago" class="form-select">
+                    <select name="forma_pago" id="forma_pago" class="form-select" onchange="manejarFormaPago()">
                         <option value="">Selecciona la forma de pago</option>
                         <option value="efectivo" {{ old('forma_pago') == 'efectivo' ? 'selected' : '' }}>Efectivo</option>
                         <option value="transferencia" {{ old('forma_pago') == 'transferencia' ? 'selected' : '' }}>Transferencia</option>
@@ -96,6 +86,36 @@
                     </select>
                     @error('forma_pago') <div class="text-danger small">{{ $message }}</div> @enderror
                 </div>
+
+                {{-- Sección IVA --}}
+                <div class="col-12 mb-3" id="seccion-iva" style="display:none">
+                    <div class="card border-warning">
+                        <div class="card-body py-2 px-3">
+                            {{-- Checkbox solo para efectivo --}}
+                            <div id="iva-checkbox-wrap" style="display:none" class="mb-2">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" name="tiene_iva" id="tiene_iva"
+                                           value="1" onchange="actualizarIva()" {{ old('tiene_iva') ? 'checked' : '' }}>
+                                    <label class="form-check-label fw-semibold" for="tiene_iva">
+                                        ¿Este gasto incluye IVA (16%)?
+                                    </label>
+                                </div>
+                            </div>
+                            {{-- Desglose --}}
+                            <div id="iva-desglose" style="display:none">
+                                <div class="row g-2 align-items-center">
+                                    <div class="col-auto text-muted small">Subtotal (sin IVA):</div>
+                                    <div class="col-auto fw-bold" id="txt-base">$0.00</div>
+                                    <div class="col-auto text-muted small ms-3">IVA 16%:</div>
+                                    <div class="col-auto fw-bold text-warning" id="txt-iva">$0.00</div>
+                                    <div class="col-auto text-muted small ms-3">Total:</div>
+                                    <div class="col-auto fw-bold text-danger" id="txt-total">$0.00</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="col-12 mb-3">
                     <label class="form-label">Concepto</label>
                     <input type="text" name="concepto" class="form-control" value="{{ old('concepto') }}">
@@ -110,4 +130,59 @@
         </form>
     </div>
 </div>
+
+<script>
+function manejarFormaPago() {
+    const forma = document.getElementById('forma_pago').value;
+    const seccion = document.getElementById('seccion-iva');
+    const checkboxWrap = document.getElementById('iva-checkbox-wrap');
+    const desglose = document.getElementById('iva-desglose');
+    const checkbox = document.getElementById('tiene_iva');
+
+    if (forma === 'transferencia' || forma === 'tarjeta') {
+        seccion.style.display = '';
+        checkboxWrap.style.display = 'none';
+        desglose.style.display = '';
+        actualizarIva(true);
+    } else if (forma === 'efectivo') {
+        seccion.style.display = '';
+        checkboxWrap.style.display = '';
+        if (checkbox.checked) {
+            desglose.style.display = '';
+            actualizarIva(true);
+        } else {
+            desglose.style.display = 'none';
+        }
+    } else {
+        seccion.style.display = 'none';
+    }
+}
+
+function actualizarIva(forzar) {
+    const forma = document.getElementById('forma_pago').value;
+    const checkbox = document.getElementById('tiene_iva');
+    const desglose = document.getElementById('iva-desglose');
+    const monto = parseFloat(document.getElementById('monto').value) || 0;
+
+    const aplica = forzar || (forma !== 'efectivo') || checkbox.checked;
+
+    if (forma === 'efectivo' && !forzar) {
+        desglose.style.display = checkbox.checked ? '' : 'none';
+    }
+
+    if (aplica) {
+        const iva = Math.round(monto * 16 / 116 * 100) / 100;
+        const base = Math.round((monto - iva) * 100) / 100;
+        document.getElementById('txt-base').textContent = '$' + base.toFixed(2);
+        document.getElementById('txt-iva').textContent = '$' + iva.toFixed(2);
+        document.getElementById('txt-total').textContent = '$' + monto.toFixed(2);
+    }
+}
+
+// Restaurar estado al volver con errores
+document.addEventListener('DOMContentLoaded', function() {
+    const forma = document.getElementById('forma_pago').value;
+    if (forma) manejarFormaPago();
+});
+</script>
 @endsection

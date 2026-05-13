@@ -23,7 +23,9 @@
                     <th>Concepto</th>
                     <th>Forma Pago</th>
                     <th>Cuenta</th>
-                    <th class="text-end">Monto</th>
+                    <th class="text-end">Subtotal</th>
+                    <th class="text-end">IVA</th>
+                    <th class="text-end">Total</th>
                     <th>Acciones</th>
                 </tr>
             </thead>
@@ -46,6 +48,12 @@
                         @endif
                     </td>
                     <td>{{ $gasto->cuenta->nombre }}</td>
+                    <td class="text-end text-muted">
+                        @if($gasto->tiene_iva) ${{ number_format($gasto->monto_base, 2) }} @else - @endif
+                    </td>
+                    <td class="text-end text-warning small">
+                        @if($gasto->tiene_iva) ${{ number_format($gasto->monto_iva, 2) }} @else - @endif
+                    </td>
                     <td class="text-end text-danger fw-bold">${{ number_format($gasto->monto, 2) }}</td>
                     <td>
                         <a href="{{ route('gastos.edit', $gasto) }}" class="btn btn-sm btn-warning">
@@ -61,14 +69,16 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="10" class="text-center text-muted">Sin registros</td>
+                    <td colspan="12" class="text-center text-muted">Sin registros</td>
                 </tr>
                 @endforelse
             </tbody>
             @if($gastos->count() > 0)
             <tfoot class="table-light">
                 <tr>
-                    <td colspan="8" class="text-end fw-bold">Total:</td>
+                    <td colspan="8" class="text-end fw-bold">Totales:</td>
+                    <td class="text-end text-muted fw-bold">${{ number_format($gastos->sum('monto') - $gastos->sum('monto_iva'), 2) }}</td>
+                    <td class="text-end text-warning fw-bold">${{ number_format($gastos->sum('monto_iva'), 2) }}</td>
                     <td class="text-end fw-bold text-danger">${{ number_format($gastos->sum('monto'), 2) }}</td>
                     <td></td>
                 </tr>

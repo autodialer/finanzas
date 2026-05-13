@@ -42,7 +42,10 @@ class GastoController extends Controller
             'forma_pago' => 'required|in:efectivo,transferencia,tarjeta',
         ]);
 
-        Gasto::create($request->all());
+        $data = $request->except(['tiene_iva', 'monto_iva']);
+        $data = array_merge($data, $this->calcularIva($request));
+
+        Gasto::create($data);
         return redirect()->route('gastos.index')->with('exito', 'Gasto registrado correctamente.');
     }
 
@@ -68,8 +71,31 @@ class GastoController extends Controller
             'forma_pago' => 'required|in:efectivo,transferencia,tarjeta',
         ]);
 
-        $gasto->update($request->all());
+        $data = $request->except(['tiene_iva', 'monto_iva']);
+        $data = array_merge($data, $this->calcularIva($request));
+
+        $gasto->update($data);
         return redirect()->route('gastos.index')->with('exito', 'Gasto actualizado correctamente.');
+    }
+
+    private function calcularIva(Request $request): array
+    {
+        $forma = $request->forma_pago;
+        $monto = (float) $request->monto;
+
+        // Transferencia y tarjeta siempre llevan IVA
+        if (in_array($forma, ['transferencia', 'tarjeta'])) {
+            $monto_iva = round($monto * 16 / 116, 2);
+            return ['tiene_iva' => true, 'monto_iva' => $monto_iva];
+        }
+
+        // Efectivo: el usuario decide
+        if ($request->boolean('tiene_iva')) {
+            $monto_iva = round($monto * 16 / 116, 2);
+            return ['tiene_iva' => true, 'monto_iva' => $monto_iva];
+        }
+
+        return ['tiene_iva' => false, 'monto_iva' => 0];
     }
 
     public function destroy(Gasto $gasto)

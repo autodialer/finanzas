@@ -7,7 +7,14 @@ use Illuminate\Database\Eloquent\Model;
 class Ingreso extends Model
 {
     protected $table = 'ingresos';
-    protected $fillable = ['negocio_id', 'area_id', 'categoria_id', 'cliente_id', 'cuenta_id', 'monto', 'fecha', 'concepto', 'forma_pago', 'notas'];
+    protected $fillable = ['negocio_id', 'area_id', 'categoria_id', 'cliente_id', 'cuenta_id', 'monto', 'fecha', 'concepto', 'forma_pago', 'notas', 'tiene_iva', 'monto_iva'];
+
+    protected $casts = ['tiene_iva' => 'boolean', 'monto_iva' => 'decimal:2'];
+
+    public function getMontoBaseAttribute(): float
+    {
+        return round($this->monto - $this->monto_iva, 2);
+    }
 
     public function negocio()
     {

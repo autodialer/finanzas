@@ -42,7 +42,10 @@ class IngresoController extends Controller
             'forma_pago' => 'required|in:efectivo,transferencia,tarjeta',
         ]);
 
-        Ingreso::create($request->all());
+        $data = $request->except(['tiene_iva', 'monto_iva']);
+        $data = array_merge($data, $this->calcularIva($request));
+
+        Ingreso::create($data);
         return redirect()->route('ingresos.index')->with('exito', 'Ingreso registrado correctamente.');
     }
 
@@ -68,8 +71,26 @@ class IngresoController extends Controller
             'forma_pago' => 'required|in:efectivo,transferencia,tarjeta',
         ]);
 
-        $ingreso->update($request->all());
+        $data = $request->except(['tiene_iva', 'monto_iva']);
+        $data = array_merge($data, $this->calcularIva($request));
+
+        $ingreso->update($data);
         return redirect()->route('ingresos.index')->with('exito', 'Ingreso actualizado correctamente.');
+    }
+
+    private function calcularIva(Request $request): array
+    {
+        $forma = $request->forma_pago;
+        $monto = (float) $request->monto;
+
+        // Transferencia y tarjeta siempre llevan IVA en ingresos
+        if (in_array($forma, ['transferencia', 'tarjeta'])) {
+            $monto_iva = round($monto * 16 / 116, 2);
+            return ['tiene_iva' => true, 'monto_iva' => $monto_iva];
+        }
+
+        // Efectivo: nunca lleva IVA en ingresos
+        return ['tiene_iva' => false, 'monto_iva' => 0];
     }
 
     public function destroy(Ingreso $ingreso)
