@@ -30,6 +30,12 @@
     </div>
 </div>
 
+@if(session('exito'))
+<div class="alert alert-success alert-dismissible fade show">
+    {{ session('exito') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+@endif
 @if(session('error'))
 <div class="alert alert-danger alert-dismissible fade show">
     {{ session('error') }}
@@ -39,25 +45,31 @@
 
 <div class="card">
     <div class="card-body p-0">
-        <table class="table table-hover mb-0">
+        <table class="table table-hover mb-0 table-sm">
             <thead class="table-dark">
                 <tr>
                     <th>Empleado</th>
                     <th>Cargo</th>
-                    <th class="text-end">Monto</th>
+                    <th class="text-end">Salario bruto</th>
+                    <th class="text-end text-warning">ISR</th>
+                    <th class="text-end text-info">IMSS obrero</th>
+                    <th class="text-end text-success">Salario neto</th>
                     <th>Notas</th>
                     @if($nomina->estado === 'borrador')
-                    <th>Ajustar</th>
+                    <th></th>
                     @endif
                 </tr>
             </thead>
             <tbody>
                 @forelse($nomina->nominas as $linea)
                 <tr>
-                    <td>{{ $linea->empleado->nombre }}</td>
+                    <td class="fw-semibold">{{ $linea->empleado->nombre }}</td>
                     <td class="text-muted">{{ $linea->empleado->cargo ?? '-' }}</td>
-                    <td class="text-end fw-bold">${{ number_format($linea->monto, 2) }}</td>
-                    <td>{{ $linea->notas ?? '-' }}</td>
+                    <td class="text-end">${{ number_format($linea->monto, 2) }}</td>
+                    <td class="text-end text-warning">- ${{ number_format($linea->isr, 2) }}</td>
+                    <td class="text-end text-info">- ${{ number_format($linea->imss_empleado, 2) }}</td>
+                    <td class="text-end fw-bold text-success">${{ number_format($linea->salario_neto, 2) }}</td>
+                    <td class="text-muted small">{{ $linea->notas ?? '-' }}</td>
                     @if($nomina->estado === 'borrador')
                     <td>
                         <button class="btn btn-sm btn-outline-secondary"
@@ -67,7 +79,7 @@
 
                         <!-- Modal ajuste -->
                         <div class="modal fade" id="modal-{{ $linea->id }}" tabindex="-1">
-                            <div class="modal-dialog modal-sm">
+                            <div class="modal-dialog">
                                 <div class="modal-content">
                                     <div class="modal-header">
                                         <h6 class="modal-title">{{ $linea->empleado->nombre }}</h6>
@@ -76,16 +88,60 @@
                                     <form action="{{ route('nominas.linea.update', $linea) }}" method="POST">
                                         @csrf @method('PATCH')
                                         <div class="modal-body">
-                                            <label class="form-label">Monto</label>
-                                            <div class="input-group mb-2">
-                                                <span class="input-group-text">$</span>
-                                                <input type="number" name="monto" class="form-control"
-                                                       value="{{ $linea->monto }}" min="0" step="0.01" required>
+                                            <div class="mb-3">
+                                                <label class="form-label fw-semibold">Salario bruto</label>
+                                                <div class="input-group">
+                                                    <span class="input-group-text">$</span>
+                                                    <input type="number" name="monto" id="bruto-{{ $linea->id }}"
+                                                           class="form-control" value="{{ $linea->monto }}"
+                                                           min="0" step="0.01" required
+                                                           oninput="calcularNeto({{ $linea->id }})">
+                                                </div>
                                             </div>
-                                            <label class="form-label">Notas</label>
-                                            <textarea name="notas" class="form-control" rows="2">{{ $linea->notas }}</textarea>
+                                            <div class="row g-2 mb-3">
+                                                <div class="col-6">
+                                                    <label class="form-label text-warning fw-semibold">ISR retenido</label>
+                                                    <div class="input-group">
+                                                        <span class="input-group-text">$</span>
+                                                        <input type="number" name="isr" id="isr-{{ $linea->id }}"
+                                                               class="form-control" value="{{ $linea->isr }}"
+                                                               min="0" step="0.01" required
+                                                               oninput="calcularNeto({{ $linea->id }})">
+                                                    </div>
+                                                    <small class="text-muted">Calculado con tablas ISR 2025</small>
+                                                </div>
+                                                <div class="col-6">
+                                                    <label class="form-label text-info fw-semibold">IMSS obrero</label>
+                                                    <div class="input-group">
+                                                        <span class="input-group-text">$</span>
+                                                        <input type="number" name="imss_empleado" id="imss-{{ $linea->id }}"
+                                                               class="form-control" value="{{ $linea->imss_empleado }}"
+                                                               min="0" step="0.01" required
+                                                               oninput="calcularNeto({{ $linea->id }})">
+                                                    </div>
+                                                    <small class="text-muted">Cuotas obreras IMSS 2025</small>
+                                                </div>
+                                            </div>
+                                            <div class="alert alert-success py-2 mb-3">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="fw-semibold">Salario neto a pagar:</span>
+                                                    <span class="fs-5 fw-bold" id="neto-display-{{ $linea->id }}">
+                                                        ${{ number_format($linea->salario_neto, 2) }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="mb-2">
+                                                <label class="form-label">Notas</label>
+                                                <textarea name="notas" class="form-control" rows="2">{{ $linea->notas }}</textarea>
+                                            </div>
                                         </div>
-                                        <div class="modal-footer">
+                                        <div class="modal-footer justify-content-between">
+                                            <form action="{{ route('nominas.linea.recalcular', $linea) }}" method="POST" class="m-0">
+                                                @csrf
+                                                <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                    <i class="bi bi-arrow-clockwise me-1"></i> Recalcular automático
+                                                </button>
+                                            </form>
                                             <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
                                         </div>
                                     </form>
@@ -97,19 +153,32 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="5" class="text-center text-muted">Sin empleados en este período</td>
+                    <td colspan="8" class="text-center text-muted">Sin empleados en este período</td>
                 </tr>
                 @endforelse
             </tbody>
             <tfoot class="table-light">
-                <tr>
-                    <td colspan="{{ $nomina->estado === 'borrador' ? 4 : 3 }}" class="text-end fw-bold">Total nómina:</td>
-                    <td class="text-end fw-bold text-danger fs-5">
-                        ${{ number_format($nomina->nominas->sum('monto'), 2) }}
-                    </td>
+                <tr class="fw-bold">
+                    <td colspan="2" class="text-end">Totales:</td>
+                    <td class="text-end">${{ number_format($nomina->nominas->sum('monto'), 2) }}</td>
+                    <td class="text-end text-warning">- ${{ number_format($nomina->nominas->sum('isr'), 2) }}</td>
+                    <td class="text-end text-info">- ${{ number_format($nomina->nominas->sum('imss_empleado'), 2) }}</td>
+                    <td class="text-end text-success fs-6">${{ number_format($nomina->nominas->sum('salario_neto'), 2) }}</td>
+                    <td colspan="{{ $nomina->estado === 'borrador' ? 2 : 1 }}"></td>
                 </tr>
             </tfoot>
         </table>
     </div>
 </div>
+
+<script>
+function calcularNeto(id) {
+    const bruto = parseFloat(document.getElementById('bruto-' + id).value) || 0;
+    const isr   = parseFloat(document.getElementById('isr-'   + id).value) || 0;
+    const imss  = parseFloat(document.getElementById('imss-'  + id).value) || 0;
+    const neto  = bruto - isr - imss;
+    document.getElementById('neto-display-' + id).textContent =
+        '$' + neto.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+</script>
 @endsection

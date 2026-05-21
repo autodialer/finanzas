@@ -44,4 +44,5 @@ Route::middleware('auth')->group(function () {
     Route::resource('nominas', PeriodoNominaController::class)->except(['edit', 'update']);
     Route::patch('nominas/{nomina}/cerrar', [PeriodoNominaController::class, 'cerrar'])->name('nominas.cerrar');
     Route::patch('nominas/linea/{linea}', [PeriodoNominaController::class, 'updateNomina'])->name('nominas.linea.update');
+    Route::post('nominas/linea/{linea}/recalcular', [PeriodoNominaController::class, 'recalcularLinea'])->name('nominas.linea.recalcular');
 });

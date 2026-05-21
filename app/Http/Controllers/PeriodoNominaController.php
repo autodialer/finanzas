@@ -9,6 +9,7 @@ use App\Models\Negocio;
 use App\Models\Cuenta;
 use App\Models\Nomina;
 use App\Models\PeriodoNomina;
+use App\Services\CalculoNominaService;
 use Illuminate\Http\Request;
 
 class PeriodoNominaController extends Controller
@@ -38,15 +39,19 @@ class PeriodoNominaController extends Controller
             'fecha_fin'    => 'required|date|after_or_equal:fecha_inicio',
         ]);
 
-        $periodo = PeriodoNomina::create($request->only('negocio_id', 'cuenta_id', 'nombre', 'fecha_inicio', 'fecha_fin'));
+        $periodo   = PeriodoNomina::create($request->only('negocio_id', 'cuenta_id', 'nombre', 'fecha_inicio', 'fecha_fin'));
+        $calculadora = new CalculoNominaService();
 
-        // Generar una línea de nómina por cada empleado activo del negocio
         $empleados = Empleado::where('negocio_id', $periodo->negocio_id)->where('activo', true)->get();
         foreach ($empleados as $empleado) {
+            $calc = $calculadora->calcular((float) $empleado->salario);
             Nomina::create([
-                'periodo_id'  => $periodo->id,
-                'empleado_id' => $empleado->id,
-                'monto'       => $empleado->salario,
+                'periodo_id'    => $periodo->id,
+                'empleado_id'   => $empleado->id,
+                'monto'         => $calc['salario_bruto'],
+                'isr'           => $calc['isr'],
+                'imss_empleado' => $calc['imss_empleado'],
+                'salario_neto'  => $calc['salario_neto'],
             ]);
         }
 
@@ -62,12 +67,36 @@ class PeriodoNominaController extends Controller
     public function updateNomina(Request $request, Nomina $linea)
     {
         $request->validate([
-            'monto' => 'required|numeric|min:0',
-            'notas' => 'nullable|string',
+            'monto'         => 'required|numeric|min:0',
+            'isr'           => 'required|numeric|min:0',
+            'imss_empleado' => 'required|numeric|min:0',
+            'notas'         => 'nullable|string',
         ]);
 
-        $linea->update($request->only('monto', 'notas'));
-        return back()->with('exito', 'Monto actualizado.');
+        $bruto = (float) $request->monto;
+        $isr   = (float) $request->isr;
+        $imss  = (float) $request->imss_empleado;
+
+        $linea->update([
+            'monto'         => $bruto,
+            'isr'           => $isr,
+            'imss_empleado' => $imss,
+            'salario_neto'  => round($bruto - $isr - $imss, 2),
+            'notas'         => $request->notas,
+        ]);
+
+        return back()->with('exito', 'Nómina actualizada.');
+    }
+
+    public function recalcularLinea(Nomina $linea)
+    {
+        $calc = (new CalculoNominaService())->calcular((float) $linea->monto);
+        $linea->update([
+            'isr'           => $calc['isr'],
+            'imss_empleado' => $calc['imss_empleado'],
+            'salario_neto'  => $calc['salario_neto'],
+        ]);
+        return back()->with('exito', 'Impuestos recalculados.');
     }
 
     public function cerrar(PeriodoNomina $nomina)
@@ -83,13 +112,12 @@ class PeriodoNominaController extends Controller
             ['nombre' => 'Nómina', 'tipo' => 'gasto']
         );
 
-        // Registrar un Gasto por empleado
         foreach ($nomina->nominas as $linea) {
             Gasto::create([
                 'negocio_id'   => $nomina->negocio_id,
                 'cuenta_id'    => $nomina->cuenta_id,
                 'categoria_id' => $categoria->id,
-                'monto'        => $linea->monto,
+                'monto'        => $linea->monto, // salario bruto
                 'fecha'        => $nomina->fecha_fin,
                 'concepto'     => 'Nómina: ' . $linea->empleado->nombre . ' — ' . $nomina->nombre,
                 'forma_pago'   => 'transferencia',
