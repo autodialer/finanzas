@@ -27,10 +27,10 @@ Route::middleware('auth')->group(function () {
     Route::resource('negocios', NegocioController::class);
     Route::resource('areas', AreaController::class);
     Route::resource('categorias', CategoriaController::class);
-    Route::resource('vendedores', VendedorController::class);
+    Route::resource('vendedores', VendedorController::class)->parameters(['vendedores' => 'vendedor']);
     Route::resource('bancos', BancoController::class);
     Route::resource('cuentas', CuentaController::class);
-    Route::resource('proveedores', ProveedorController::class);
+    Route::resource('proveedores', ProveedorController::class)->parameters(['proveedores' => 'proveedor']);
     Route::get('proveedores-importar', [ProveedorController::class, 'importForm'])->name('proveedores.import.form');
     Route::post('proveedores-importar', [ProveedorController::class, 'import'])->name('proveedores.import');
 
