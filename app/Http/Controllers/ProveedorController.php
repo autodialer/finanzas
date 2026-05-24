@@ -55,10 +55,22 @@ class ProveedorController extends Controller
     public function destroy(Proveedor $proveedor)
     {
         try {
-            $proveedor->delete();
-            return redirect()->route('proveedores.index')->with('exito', 'Proveedor eliminado correctamente.');
+            $id     = $proveedor->id;
+            $result = $proveedor->delete();
+            $existe  = Proveedor::find($id);
+
+            if ($result && ! $existe) {
+                return redirect()->route('proveedores.index')
+                    ->with('exito', "Proveedor #{$id} eliminado correctamente.");
+            }
+
+            // delete() devolvió false o el registro sigue existiendo
+            return redirect()->route('proveedores.index')
+                ->with('error', "Debug — delete() devolvió: " . var_export($result, true)
+                    . " | ¿Sigue en BD?: " . ($existe ? 'SÍ' : 'NO'));
         } catch (QueryException $e) {
-            return redirect()->route('proveedores.index')->with('error', 'No se pudo eliminar el proveedor porque tiene registros vinculados.');
+            return redirect()->route('proveedores.index')
+                ->with('error', 'Error BD: ' . $e->getMessage());
         }
     }
 
