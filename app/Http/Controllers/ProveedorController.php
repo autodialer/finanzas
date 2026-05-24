@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Negocio;
 use App\Models\Proveedor;
 use Illuminate\Http\Request;
+use Illuminate\Database\QueryException;
 
 class ProveedorController extends Controller
 {
@@ -53,9 +54,12 @@ class ProveedorController extends Controller
 
     public function destroy(Proveedor $proveedor)
     {
-        $proveedor->delete();
-
-        return redirect()->route('proveedores.index')->with('exito', 'Proveedor eliminado correctamente.');
+        try {
+            $proveedor->delete();
+            return redirect()->route('proveedores.index')->with('exito', 'Proveedor eliminado correctamente.');
+        } catch (QueryException $e) {
+            return redirect()->route('proveedores.index')->with('error', 'No se pudo eliminar el proveedor porque tiene registros vinculados.');
+        }
     }
 
     public function importForm()
