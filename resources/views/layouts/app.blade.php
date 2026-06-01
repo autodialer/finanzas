@@ -125,7 +125,7 @@
             <!-- Contenido principal -->
             <div class="col-md-10 main-content p-4">
                 <!-- Navbar móvil -->
-                <nav class="navbar navbar-expand-md d-md-none bg-dark mb-3 rounded">
+                <nav class="navbar navbar-dark navbar-expand-md d-md-none bg-dark mb-3 rounded">
                     <div class="container-fluid">
                         <span class="navbar-brand text-white">Finanzas</span>
                         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#menuMovil">
