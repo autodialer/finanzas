@@ -11,13 +11,13 @@ class CuentaController extends Controller
 {
     public function index()
     {
-        $cuentas = Cuenta::with('negocio', 'banco')->get();
+        $cuentas = $this->aplicarFiltroNegocio(Cuenta::with('negocio', 'banco'))->get();
         return view('cuentas.index', compact('cuentas'));
     }
 
     public function create()
     {
-        $negocios = Negocio::all();
+        $negocios = $this->negociosVisibles();
         $bancos = Banco::all();
         return view('cuentas.create', compact('negocios', 'bancos'));
     }
@@ -35,7 +35,7 @@ class CuentaController extends Controller
 
     public function edit(Cuenta $cuenta)
     {
-        $negocios = Negocio::all();
+        $negocios = $this->negociosVisibles();
         $bancos = Banco::all();
         return view('cuentas.edit', compact('cuenta', 'negocios', 'bancos'));
     }

@@ -13,39 +13,43 @@ class DashboardController extends Controller
 {
     public function index()
     {
-        $mesActual = now()->month;
+        $mesActual  = now()->month;
         $anioActual = now()->year;
+        $ids        = $this->negociosPermitidos(); // null = admin, collection = restringido
 
-        $totalIngresosMes = Ingreso::whereMonth('fecha', $mesActual)
-            ->whereYear('fecha', $anioActual)
-            ->sum('monto');
+        $totalIngresosMes = $this->aplicarFiltroNegocio(Ingreso::query())
+            ->whereMonth('fecha', $mesActual)->whereYear('fecha', $anioActual)->sum('monto');
 
-        $totalGastosMes = Gasto::whereMonth('fecha', $mesActual)
-            ->whereYear('fecha', $anioActual)
-            ->sum('monto');
+        $totalGastosMes = $this->aplicarFiltroNegocio(Gasto::query())
+            ->whereMonth('fecha', $mesActual)->whereYear('fecha', $anioActual)->sum('monto');
 
         $balanceMes = $totalIngresosMes - $totalGastosMes;
 
-        $ivaCobradomMes = Ingreso::whereMonth('fecha', $mesActual)
-            ->whereYear('fecha', $anioActual)
-            ->sum('monto_iva');
+        $ivaCobradomMes = $this->aplicarFiltroNegocio(Ingreso::query())
+            ->whereMonth('fecha', $mesActual)->whereYear('fecha', $anioActual)->sum('monto_iva');
 
-        $ivaPagadoMes = Gasto::whereMonth('fecha', $mesActual)
-            ->whereYear('fecha', $anioActual)
-            ->sum('monto_iva');
+        $ivaPagadoMes = $this->aplicarFiltroNegocio(Gasto::query())
+            ->whereMonth('fecha', $mesActual)->whereYear('fecha', $anioActual)->sum('monto_iva');
 
         $saldoIva = $ivaCobradomMes - $ivaPagadoMes;
 
-        $ingresosPorNegocio = Negocio::withSum(['ingresos' => function ($q) use ($mesActual, $anioActual) {
+        $negociosBase = $ids ? Negocio::whereIn('id', $ids) : Negocio::query();
+
+        $ingresosPorNegocio = (clone $negociosBase)->withSum(['ingresos' => function ($q) use ($mesActual, $anioActual) {
             $q->whereMonth('fecha', $mesActual)->whereYear('fecha', $anioActual);
         }], 'monto')->get();
 
-        $gastosPorNegocio = Negocio::withSum(['gastos' => function ($q) use ($mesActual, $anioActual) {
+        $gastosPorNegocio = (clone $negociosBase)->withSum(['gastos' => function ($q) use ($mesActual, $anioActual) {
             $q->whereMonth('fecha', $mesActual)->whereYear('fecha', $anioActual);
         }], 'monto')->get();
 
-        // Saldo disponible total por cuenta (histórico, incluyendo traspasos)
-        $cuentaIds = Cuenta::pluck('id');
+        // Cuentas visibles: solo las de negocios permitidos
+        $cuentasQuery = Cuenta::with('negocio')->withSum('ingresos', 'monto')->withSum('gastos', 'monto');
+        if ($ids !== null) {
+            $cuentasQuery->whereIn('negocio_id', $ids);
+        }
+
+        $cuentaIds = $cuentasQuery->pluck('id');
 
         $traspasoEntrada = Traspaso::selectRaw('cuenta_destino_id as cuenta_id, SUM(monto) as total')
             ->groupBy('cuenta_destino_id')->pluck('total', 'cuenta_id');
@@ -53,26 +57,21 @@ class DashboardController extends Controller
         $traspasoSalida = Traspaso::selectRaw('cuenta_origen_id as cuenta_id, SUM(monto) as total')
             ->groupBy('cuenta_origen_id')->pluck('total', 'cuenta_id');
 
-        $cuentasConSaldo = Cuenta::with('negocio')
-            ->withSum('ingresos', 'monto')
-            ->withSum('gastos', 'monto')
-            ->get()
-            ->map(function ($cuenta) use ($traspasoEntrada, $traspasoSalida) {
-                $ingresos  = $cuenta->ingresos_sum_monto ?? 0;
-                $gastos    = $cuenta->gastos_sum_monto ?? 0;
-                $entrada   = $traspasoEntrada[$cuenta->id] ?? 0;
-                $salida    = $traspasoSalida[$cuenta->id] ?? 0;
-                $cuenta->total_entradas = $ingresos + $entrada;
-                $cuenta->total_salidas  = $gastos + $salida;
-                $cuenta->saldo = $cuenta->total_entradas - $cuenta->total_salidas;
-                return $cuenta;
-            })
-            ->sortByDesc('saldo');
+        $cuentasConSaldo = $cuentasQuery->get()->map(function ($cuenta) use ($traspasoEntrada, $traspasoSalida) {
+            $ingresos = $cuenta->ingresos_sum_monto ?? 0;
+            $gastos   = $cuenta->gastos_sum_monto ?? 0;
+            $entrada  = $traspasoEntrada[$cuenta->id] ?? 0;
+            $salida   = $traspasoSalida[$cuenta->id] ?? 0;
+            $cuenta->total_entradas = $ingresos + $entrada;
+            $cuenta->total_salidas  = $gastos + $salida;
+            $cuenta->saldo          = $cuenta->total_entradas - $cuenta->total_salidas;
+            return $cuenta;
+        })->sortByDesc('saldo');
 
         $saldoTotalCuentas = $cuentasConSaldo->sum('saldo');
 
         $ultimosMovimientos = collect()
-            ->merge(Ingreso::with('negocio', 'categoria', 'user')->latest()->take(5)->get()->map(fn($i) => [
+            ->merge($this->aplicarFiltroNegocio(Ingreso::with('negocio', 'categoria', 'user'))->latest()->take(5)->get()->map(fn($i) => [
                 'fecha'          => $i->fecha,
                 'tipo'           => 'ingreso',
                 'negocio'        => $i->negocio->nombre,
@@ -80,7 +79,7 @@ class DashboardController extends Controller
                 'monto'          => $i->monto,
                 'registrado_por' => $i->user->name ?? '-',
             ]))
-            ->merge(Gasto::with('negocio', 'categoria', 'user')->latest()->take(5)->get()->map(fn($g) => [
+            ->merge($this->aplicarFiltroNegocio(Gasto::with('negocio', 'categoria', 'user'))->latest()->take(5)->get()->map(fn($g) => [
                 'fecha'          => $g->fecha,
                 'tipo'           => 'gasto',
                 'negocio'        => $g->negocio->nombre,
@@ -92,17 +91,10 @@ class DashboardController extends Controller
             ->take(10);
 
         return view('dashboard', compact(
-            'totalIngresosMes',
-            'totalGastosMes',
-            'balanceMes',
-            'ivaCobradomMes',
-            'ivaPagadoMes',
-            'saldoIva',
-            'ingresosPorNegocio',
-            'gastosPorNegocio',
-            'ultimosMovimientos',
-            'cuentasConSaldo',
-            'saldoTotalCuentas'
+            'totalIngresosMes', 'totalGastosMes', 'balanceMes',
+            'ivaCobradomMes', 'ivaPagadoMes', 'saldoIva',
+            'ingresosPorNegocio', 'gastosPorNegocio',
+            'ultimosMovimientos', 'cuentasConSaldo', 'saldoTotalCuentas'
         ));
     }
 }

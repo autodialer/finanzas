@@ -3,10 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Categoria;
+use App\Models\Cuenta;
 use App\Models\Empleado;
+use App\Models\Empresa;
 use App\Models\Gasto;
 use App\Models\Negocio;
-use App\Models\Cuenta;
 use App\Models\Nomina;
 use App\Models\PeriodoNomina;
 use App\Services\CalculoNominaService;
@@ -16,17 +17,36 @@ class PeriodoNominaController extends Controller
 {
     public function index()
     {
-        $periodos = PeriodoNomina::with('negocio', 'cuenta', 'nominas')
-            ->latest()
-            ->get();
+        $periodos = $this->aplicarFiltroNegocio(
+            PeriodoNomina::with('negocio', 'cuenta', 'empresa', 'nominas')
+        )->latest()->get();
         return view('nominas.index', compact('periodos'));
     }
 
     public function create()
     {
-        $negocios = Negocio::all();
-        $cuentas  = Cuenta::with('negocio')->get();
-        return view('nominas.create', compact('negocios', 'cuentas'));
+        $negocios            = $this->negociosVisibles();
+        $cuentas             = Cuenta::with('negocio')->get();
+        $empresas            = Empresa::orderBy('nombre')->get();
+        $negociosConEmpresas = Empresa::select('negocio_id')->distinct()->pluck('negocio_id')->toArray();
+
+        $empresasPorNegocio = $empresas->groupBy('negocio_id')
+            ->map(fn($g) => $g->map(fn($e) => ['id' => $e->id, 'nombre' => $e->nombre])->values())
+            ->toArray();
+
+        $cuentasJson  = $cuentas->map(fn($c) => [
+            'id'             => $c->id,
+            'nombre'         => $c->nombre,
+            'negocio_id'     => $c->negocio_id,
+            'negocio_nombre' => $c->negocio->nombre ?? '',
+        ])->values()->toJson();
+
+        $empresasJson = json_encode($empresasPorNegocio);
+
+        return view('nominas.create', compact(
+            'negocios', 'cuentas', 'empresas', 'negociosConEmpresas',
+            'cuentasJson', 'empresasJson'
+        ));
     }
 
     public function store(Request $request)
@@ -37,13 +57,25 @@ class PeriodoNominaController extends Controller
             'nombre'       => 'required|string|max:255',
             'fecha_inicio' => 'required|date',
             'fecha_fin'    => 'required|date|after_or_equal:fecha_inicio',
+            'empresa_id'   => 'nullable|exists:empresas,id',
+            'tipo_periodo' => 'nullable|in:semanal,quincenal',
         ]);
 
-        $periodo   = PeriodoNomina::create($request->only('negocio_id', 'cuenta_id', 'nombre', 'fecha_inicio', 'fecha_fin'));
+        $periodo = PeriodoNomina::create($request->only(
+            'negocio_id', 'cuenta_id', 'nombre', 'fecha_inicio', 'fecha_fin', 'empresa_id', 'tipo_periodo'
+        ));
+
         $calculadora = new CalculoNominaService();
 
-        $empleados = Empleado::where('negocio_id', $periodo->negocio_id)->where('activo', true)->get();
-        foreach ($empleados as $empleado) {
+        $query = Empleado::where('negocio_id', $periodo->negocio_id)->where('activo', true);
+        if ($periodo->empresa_id) {
+            $query->where('empresa_id', $periodo->empresa_id);
+        }
+        if ($periodo->tipo_periodo) {
+            $query->where('periodo_pago', $periodo->tipo_periodo);
+        }
+
+        foreach ($query->get() as $empleado) {
             $calc = $calculadora->calcular((float) $empleado->salario);
             Nomina::create([
                 'periodo_id'    => $periodo->id,
@@ -60,8 +92,9 @@ class PeriodoNominaController extends Controller
 
     public function show(PeriodoNomina $nomina)
     {
-        $nomina->load('negocio', 'cuenta', 'nominas.empleado');
-        return view('nominas.show', compact('nomina'));
+        $nomina->load('negocio', 'cuenta', 'empresa', 'nominas.empleado', 'nominas.cuenta');
+        $cuentas = Cuenta::with('negocio')->orderBy('nombre')->get();
+        return view('nominas.show', compact('nomina', 'cuentas'));
     }
 
     public function updateNomina(Request $request, Nomina $linea)
@@ -71,6 +104,7 @@ class PeriodoNominaController extends Controller
             'isr'           => 'required|numeric|min:0',
             'imss_empleado' => 'required|numeric|min:0',
             'notas'         => 'nullable|string',
+            'cuenta_id'     => 'nullable|exists:cuentas,id',
         ]);
 
         $bruto = (float) $request->monto;
@@ -83,6 +117,7 @@ class PeriodoNominaController extends Controller
             'imss_empleado' => $imss,
             'salario_neto'  => round($bruto - $isr - $imss, 2),
             'notas'         => $request->notas,
+            'cuenta_id'     => $request->cuenta_id ?: null,
         ]);
 
         return back()->with('exito', 'Nómina actualizada.');
@@ -105,21 +140,23 @@ class PeriodoNominaController extends Controller
             return back()->with('error', 'Este período ya está cerrado.');
         }
 
-        $nomina->load('nominas.empleado');
+        $nomina->load('nominas.empleado', 'nominas.cuenta', 'cuenta');
 
         $categoria = Categoria::firstOrCreate(
-            ['nombre' => 'Nómina', 'tipo' => 'gasto'],
-            ['nombre' => 'Nómina', 'tipo' => 'gasto']
+            ['nombre' => 'Nomina', 'tipo' => 'gasto'],
+            ['nombre' => 'Nomina', 'tipo' => 'gasto']
         );
 
         foreach ($nomina->nominas as $linea) {
+            $cuentaEfectiva = $linea->cuenta ?? $nomina->cuenta;
+
             Gasto::create([
-                'negocio_id'   => $nomina->negocio_id,
-                'cuenta_id'    => $nomina->cuenta_id,
+                'negocio_id'   => $cuentaEfectiva->negocio_id,
+                'cuenta_id'    => $cuentaEfectiva->id,
                 'categoria_id' => $categoria->id,
-                'monto'        => $linea->monto, // salario bruto
+                'monto'        => $linea->monto,
                 'fecha'        => $nomina->fecha_fin,
-                'concepto'     => 'Nómina: ' . $linea->empleado->nombre . ' — ' . $nomina->nombre,
+                'concepto'     => 'Nomina: ' . $linea->empleado->nombre . ' - ' . $nomina->nombre,
                 'forma_pago'   => 'transferencia',
             ]);
         }

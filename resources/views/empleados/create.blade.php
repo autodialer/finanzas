@@ -23,13 +23,29 @@
             <div class="row g-3">
                 <div class="col-md-6">
                     <label class="form-label">Negocio <span class="text-danger">*</span></label>
-                    <select name="negocio_id" class="form-select" required>
+                    <select id="negocio_id" name="negocio_id" class="form-select" required>
                         <option value="">Selecciona un negocio</option>
                         @foreach($negocios as $negocio)
                         <option value="{{ $negocio->id }}" {{ old('negocio_id') == $negocio->id ? 'selected' : '' }}>
                             {{ $negocio->nombre }}
                         </option>
                         @endforeach
+                    </select>
+                </div>
+
+                <div id="fila-empresa" class="col-md-6" style="display:none">
+                    <label class="form-label">Empresa</label>
+                    <select id="empresa_id" name="empresa_id" class="form-select">
+                        <option value="">Todos los empleados del negocio</option>
+                    </select>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Período de pago</label>
+                    <select name="periodo_pago" class="form-select">
+                        <option value="">Sin especificar</option>
+                        <option value="semanal" {{ old('periodo_pago') == 'semanal' ? 'selected' : '' }}>Semanal</option>
+                        <option value="quincenal" {{ old('periodo_pago') == 'quincenal' ? 'selected' : '' }}>Quincenal</option>
                     </select>
                 </div>
 
@@ -68,4 +84,35 @@
         </form>
     </div>
 </div>
+
+<script>
+const negociosConEmpresas = @json($negociosConEmpresas);
+const empresasPorNegocio  = @json($empresas->groupBy('negocio_id')->map(fn($g) => $g->map(fn($e) => ['id' => $e->id, 'nombre' => $e->nombre])->values()));
+
+const selNegocio  = document.getElementById('negocio_id');
+const filaEmpresa = document.getElementById('fila-empresa');
+const selEmpresa  = document.getElementById('empresa_id');
+
+function actualizarEmpresas() {
+    const negId = parseInt(selNegocio.value);
+    const tieneEmpresas = negociosConEmpresas.includes(negId);
+    filaEmpresa.style.display = tieneEmpresas ? '' : 'none';
+
+    // repoblar select
+    while (selEmpresa.options.length > 1) selEmpresa.remove(1);
+    if (tieneEmpresas && empresasPorNegocio[negId]) {
+        empresasPorNegocio[negId].forEach(e => {
+            selEmpresa.add(new Option(e.nombre, e.id));
+        });
+    }
+    if (!tieneEmpresas) selEmpresa.value = '';
+}
+
+selNegocio.addEventListener('change', actualizarEmpresas);
+
+// Restore on back-navigation
+if (selNegocio.value) actualizarEmpresas();
+const oldEmpresa = "{{ old('empresa_id') }}";
+if (oldEmpresa) selEmpresa.value = oldEmpresa;
+</script>
 @endsection

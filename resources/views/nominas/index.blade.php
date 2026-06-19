@@ -24,6 +24,8 @@
                 <tr>
                     <th>Período</th>
                     <th>Negocio</th>
+                    <th>Empresa</th>
+                    <th>Tipo</th>
                     <th>Fechas</th>
                     <th>Empleados</th>
                     <th class="text-end">Total</th>
@@ -36,6 +38,16 @@
                 <tr>
                     <td>{{ $periodo->nombre }}</td>
                     <td>{{ $periodo->negocio->nombre }}</td>
+                    <td>{{ $periodo->empresa->nombre ?? '-' }}</td>
+                    <td>
+                        @if($periodo->tipo_periodo == 'semanal')
+                            <span class="badge bg-info text-dark">Semanal</span>
+                        @elseif($periodo->tipo_periodo == 'quincenal')
+                            <span class="badge bg-primary">Quincenal</span>
+                        @else
+                            <span class="text-muted">-</span>
+                        @endif
+                    </td>
                     <td class="text-muted small">
                         {{ $periodo->fecha_inicio->format('d/m/Y') }} — {{ $periodo->fecha_fin->format('d/m/Y') }}
                     </td>
@@ -64,7 +76,7 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="7" class="text-center text-muted">Sin períodos de nómina</td>
+                    <td colspan="9" class="text-center text-muted">Sin períodos de nómina</td>
                 </tr>
                 @endforelse
             </tbody>

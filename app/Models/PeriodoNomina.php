@@ -8,13 +8,18 @@ class PeriodoNomina extends Model
 {
     protected $table = 'periodos_nomina';
 
-    protected $fillable = ['negocio_id', 'cuenta_id', 'nombre', 'fecha_inicio', 'fecha_fin', 'estado'];
+    protected $fillable = ['negocio_id', 'empresa_id', 'cuenta_id', 'nombre', 'fecha_inicio', 'fecha_fin', 'estado', 'tipo_periodo'];
 
     protected $casts = ['fecha_inicio' => 'date', 'fecha_fin' => 'date'];
 
     public function negocio()
     {
         return $this->belongsTo(Negocio::class);
+    }
+
+    public function empresa()
+    {
+        return $this->belongsTo(Empresa::class);
     }
 
     public function cuenta()

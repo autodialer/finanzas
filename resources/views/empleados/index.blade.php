@@ -16,9 +16,11 @@
             <thead class="table-dark">
                 <tr>
                     <th>Negocio</th>
+                    <th>Empresa</th>
                     <th>Nombre</th>
                     <th>Cargo</th>
-                    <th class="text-end">Salario por período</th>
+                    <th>Período</th>
+                    <th class="text-end">Salario</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                 </tr>
@@ -27,8 +29,18 @@
                 @forelse($empleados as $empleado)
                 <tr>
                     <td>{{ $empleado->negocio->nombre }}</td>
+                    <td>{{ $empleado->empresa->nombre ?? '-' }}</td>
                     <td>{{ $empleado->nombre }}</td>
                     <td>{{ $empleado->cargo ?? '-' }}</td>
+                    <td>
+                        @if($empleado->periodo_pago == 'semanal')
+                            <span class="badge bg-info text-dark">Semanal</span>
+                        @elseif($empleado->periodo_pago == 'quincenal')
+                            <span class="badge bg-primary">Quincenal</span>
+                        @else
+                            <span class="text-muted">-</span>
+                        @endif
+                    </td>
                     <td class="text-end fw-bold">${{ number_format($empleado->salario, 2) }}</td>
                     <td>
                         @if($empleado->activo)
@@ -51,7 +63,7 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="6" class="text-center text-muted">Sin empleados registrados</td>
+                    <td colspan="8" class="text-center text-muted">Sin empleados registrados</td>
                 </tr>
                 @endforelse
             </tbody>

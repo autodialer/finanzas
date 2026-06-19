@@ -7,9 +7,11 @@
     <div>
         <h4 class="mb-0">{{ $nomina->nombre }}</h4>
         <small class="text-muted">
-            {{ $nomina->negocio->nombre }} &bull;
-            {{ $nomina->fecha_inicio->format('d/m/Y') }} al {{ $nomina->fecha_fin->format('d/m/Y') }} &bull;
-            Cuenta: {{ $nomina->cuenta->nombre }}
+            {{ $nomina->negocio->nombre }}
+            @if($nomina->empresa) &bull; {{ $nomina->empresa->nombre }} @endif
+            @if($nomina->tipo_periodo) &bull; <span class="badge bg-secondary">{{ ucfirst($nomina->tipo_periodo) }}</span> @endif
+            &bull; {{ $nomina->fecha_inicio->format('d/m/Y') }} al {{ $nomina->fecha_fin->format('d/m/Y') }}
+            &bull; Cuenta: {{ $nomina->cuenta->nombre }}
         </small>
     </div>
     <div class="d-flex gap-2">
@@ -50,6 +52,7 @@
                 <tr>
                     <th>Empleado</th>
                     <th>Cargo</th>
+                    <th>Cuenta</th>
                     <th class="text-end">Salario bruto</th>
                     <th class="text-end text-warning">ISR</th>
                     <th class="text-end text-info">IMSS obrero</th>
@@ -65,6 +68,13 @@
                 <tr>
                     <td class="fw-semibold">{{ $linea->empleado->nombre }}</td>
                     <td class="text-muted">{{ $linea->empleado->cargo ?? '-' }}</td>
+                    <td>
+                        @if($linea->cuenta)
+                            <span class="badge bg-primary">{{ $linea->cuenta->nombre }}</span>
+                        @else
+                            <span class="text-muted small">Default</span>
+                        @endif
+                    </td>
                     <td class="text-end">${{ number_format($linea->monto, 2) }}</td>
                     <td class="text-end text-warning">- ${{ number_format($linea->isr, 2) }}</td>
                     <td class="text-end text-info">- ${{ number_format($linea->imss_empleado, 2) }}</td>
@@ -89,6 +99,22 @@
                                         @csrf @method('PATCH')
                                         <div class="modal-body">
                                             <div class="mb-3">
+                                                <label class="form-label fw-semibold">Cuenta de pago (opcional)</label>
+                                                <select name="cuenta_id" class="form-select">
+                                                    <option value="">Usar cuenta del período ({{ $nomina->cuenta->nombre }})</option>
+                                                    @foreach($cuentas->groupBy('negocio.nombre') as $negNombre => $grupo)
+                                                    <optgroup label="{{ $negNombre }}">
+                                                        @foreach($grupo as $cuenta)
+                                                        <option value="{{ $cuenta->id }}" {{ $linea->cuenta_id == $cuenta->id ? 'selected' : '' }}>
+                                                            {{ $cuenta->nombre }}
+                                                        </option>
+                                                        @endforeach
+                                                    </optgroup>
+                                                    @endforeach
+                                                </select>
+                                                <small class="text-muted">Solo si este empleado se paga de una cuenta diferente.</small>
+                                            </div>
+                                            <div class="mb-3">
                                                 <label class="form-label fw-semibold">Salario bruto</label>
                                                 <div class="input-group">
                                                     <span class="input-group-text">$</span>
@@ -108,7 +134,6 @@
                                                                min="0" step="0.01" required
                                                                oninput="calcularNeto({{ $linea->id }})">
                                                     </div>
-                                                    <small class="text-muted">Calculado con tablas ISR 2025</small>
                                                 </div>
                                                 <div class="col-6">
                                                     <label class="form-label text-info fw-semibold">IMSS obrero</label>
@@ -119,7 +144,6 @@
                                                                min="0" step="0.01" required
                                                                oninput="calcularNeto({{ $linea->id }})">
                                                     </div>
-                                                    <small class="text-muted">Cuotas obreras IMSS 2025</small>
                                                 </div>
                                             </div>
                                             <div class="alert alert-success py-2 mb-3">
@@ -153,13 +177,13 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="8" class="text-center text-muted">Sin empleados en este período</td>
+                    <td colspan="9" class="text-center text-muted">Sin empleados en este período</td>
                 </tr>
                 @endforelse
             </tbody>
             <tfoot class="table-light">
                 <tr class="fw-bold">
-                    <td colspan="2" class="text-end">Totales:</td>
+                    <td colspan="3" class="text-end">Totales:</td>
                     <td class="text-end">${{ number_format($nomina->nominas->sum('monto'), 2) }}</td>
                     <td class="text-end text-warning">- ${{ number_format($nomina->nominas->sum('isr'), 2) }}</td>
                     <td class="text-end text-info">- ${{ number_format($nomina->nominas->sum('imss_empleado'), 2) }}</td>

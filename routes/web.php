@@ -17,6 +17,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\VendedorController;
 use App\Http\Controllers\EmpleadoController;
 use App\Http\Controllers\PeriodoNominaController;
+use App\Http\Controllers\EmpresaController;
 use App\Http\Controllers\TraspasoController;
 use App\Http\Controllers\PerfilController;
 use Illuminate\Support\Facades\Route;
@@ -54,6 +55,7 @@ Route::middleware('auth')->group(function () {
     Route::put('perfil/password', [PerfilController::class, 'updatePassword'])->name('perfil.password.update');
 
     Route::resource('empleados', EmpleadoController::class);
+    Route::resource('empresas', EmpresaController::class);
     Route::resource('nominas', PeriodoNominaController::class)->except(['edit', 'update']);
     Route::patch('nominas/{nomina}/cerrar', [PeriodoNominaController::class, 'cerrar'])->name('nominas.cerrar');
     Route::patch('nominas/linea/{linea}', [PeriodoNominaController::class, 'updateNomina'])->name('nominas.linea.update');

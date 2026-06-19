@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Nomina extends Model
 {
-    protected $fillable = ['periodo_id', 'empleado_id', 'monto', 'isr', 'imss_empleado', 'salario_neto', 'notas'];
+    protected $fillable = ['periodo_id', 'empleado_id', 'cuenta_id', 'monto', 'isr', 'imss_empleado', 'salario_neto', 'notas'];
 
     protected $casts = [
         'monto'         => 'decimal:2',
@@ -23,5 +23,10 @@ class Nomina extends Model
     public function empleado()
     {
         return $this->belongsTo(Empleado::class);
+    }
+
+    public function cuenta()
+    {
+        return $this->belongsTo(Cuenta::class);
     }
 }

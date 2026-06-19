@@ -2,24 +2,33 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Traspaso;
 use App\Models\Cuenta;
+use App\Models\Traspaso;
 use Illuminate\Http\Request;
 
 class TraspasoController extends Controller
 {
     public function index()
     {
-        $traspasos = Traspaso::with('cuentaOrigen.negocio', 'cuentaDestino.negocio')
-            ->latest()
-            ->get();
+        $ids = $this->negociosPermitidos();
+
+        $query = Traspaso::with('cuentaOrigen.negocio', 'cuentaDestino.negocio')->latest();
+
+        if ($ids !== null) {
+            // Excluir traspasos que involucren cuentas de negocios privados
+            $cuentasVisibles = Cuenta::whereIn('negocio_id', $ids)->pluck('id');
+            $query->whereIn('cuenta_origen_id', $cuentasVisibles)
+                  ->whereIn('cuenta_destino_id', $cuentasVisibles);
+        }
+
+        $traspasos = $query->get();
 
         return view('traspasos.index', compact('traspasos'));
     }
 
     public function create()
     {
-        $cuentas = Cuenta::with('negocio')->orderBy('nombre')->get();
+        $cuentas = $this->aplicarFiltroNegocio(Cuenta::with('negocio'))->orderBy('nombre')->get();
         return view('traspasos.create', compact('cuentas'));
     }
 

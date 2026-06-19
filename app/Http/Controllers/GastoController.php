@@ -13,32 +13,31 @@ class GastoController extends Controller
 {
     public function index()
     {
-        $gastos = Gasto::with('negocio', 'categoria', 'proveedor', 'cuenta', 'user')
-            ->orderBy('fecha', 'desc')
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $gastos = $this->aplicarFiltroNegocio(
+            Gasto::with('negocio', 'categoria', 'proveedor', 'cuenta', 'user')
+        )->orderBy('fecha', 'desc')->orderBy('created_at', 'desc')->get();
         return view('gastos.index', compact('gastos'));
     }
 
     public function create()
     {
-        $negocios = Negocio::all();
-        $categorias = Categoria::whereIn('tipo', ['gasto', 'ambos'])->get();
+        $negocios    = $this->negociosVisibles();
+        $categorias  = Categoria::whereIn('tipo', ['gasto', 'ambos'])->get();
         $proveedores = Proveedor::orderBy('nombre')->get();
-        $cuentas = Cuenta::with('negocio')->orderBy('nombre')->get();
+        $cuentas     = Cuenta::with('negocio')->orderBy('nombre')->get();
         return view('gastos.create', compact('negocios', 'categorias', 'proveedores', 'cuentas'));
     }
 
     public function store(Request $request)
     {
         $request->validate([
-            'negocio_id' => 'required|exists:negocios,id',
-            'categoria_id' => 'required|exists:categorias,id',
-            'cuenta_id' => 'required|exists:cuentas,id',
-            'monto' => 'required|numeric|min:0',
-            'fecha' => 'required|date',
-            'concepto' => 'required',
-            'forma_pago' => 'required|in:efectivo,transferencia,tarjeta',
+            'negocio_id'  => 'required|exists:negocios,id',
+            'categoria_id'=> 'required|exists:categorias,id',
+            'cuenta_id'   => 'required|exists:cuentas,id',
+            'monto'       => 'required|numeric|min:0',
+            'fecha'       => 'required|date',
+            'concepto'    => 'required',
+            'forma_pago'  => 'required|in:efectivo,transferencia,tarjeta',
         ]);
 
         $data = $request->except(['tiene_iva', 'monto_iva']);
@@ -50,23 +49,23 @@ class GastoController extends Controller
 
     public function edit(Gasto $gasto)
     {
-        $negocios = Negocio::all();
-        $categorias = Categoria::whereIn('tipo', ['gasto', 'ambos'])->get();
+        $negocios    = $this->negociosVisibles();
+        $categorias  = Categoria::whereIn('tipo', ['gasto', 'ambos'])->get();
         $proveedores = Proveedor::orderBy('nombre')->get();
-        $cuentas = Cuenta::with('negocio')->orderBy('nombre')->get();
+        $cuentas     = Cuenta::with('negocio')->orderBy('nombre')->get();
         return view('gastos.edit', compact('gasto', 'negocios', 'categorias', 'proveedores', 'cuentas'));
     }
 
     public function update(Request $request, Gasto $gasto)
     {
         $request->validate([
-            'negocio_id' => 'required|exists:negocios,id',
-            'categoria_id' => 'required|exists:categorias,id',
-            'cuenta_id' => 'required|exists:cuentas,id',
-            'monto' => 'required|numeric|min:0',
-            'fecha' => 'required|date',
-            'concepto' => 'required',
-            'forma_pago' => 'required|in:efectivo,transferencia,tarjeta',
+            'negocio_id'  => 'required|exists:negocios,id',
+            'categoria_id'=> 'required|exists:categorias,id',
+            'cuenta_id'   => 'required|exists:cuentas,id',
+            'monto'       => 'required|numeric|min:0',
+            'fecha'       => 'required|date',
+            'concepto'    => 'required',
+            'forma_pago'  => 'required|in:efectivo,transferencia,tarjeta',
         ]);
 
         $data = $request->except(['tiene_iva', 'monto_iva']);

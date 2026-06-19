@@ -14,13 +14,13 @@ class ReporteController extends Controller
 {
     public function index(Request $request)
     {
-        $negocios = Negocio::all();
+        $negocios = $this->negociosVisibles();
         $categorias = Categoria::all();
 
         $filtros = $request->only(['negocio_id', 'categoria_id', 'fecha_inicio', 'fecha_fin', 'tipo']);
 
-        $queryIngresos = Ingreso::with('negocio', 'categoria', 'cliente', 'cuenta');
-        $queryGastos = Gasto::with('negocio', 'categoria', 'proveedor', 'cuenta');
+        $queryIngresos = $this->aplicarFiltroNegocio(Ingreso::with('negocio', 'categoria', 'cliente', 'cuenta'));
+        $queryGastos   = $this->aplicarFiltroNegocio(Gasto::with('negocio', 'categoria', 'proveedor', 'cuenta'));
 
         if (!empty($filtros['negocio_id'])) {
             $queryIngresos->where('negocio_id', $filtros['negocio_id']);
@@ -62,14 +62,14 @@ class ReporteController extends Controller
 
     public function cuentas(Request $request)
     {
-        $negocios = Negocio::orderBy('nombre')->get();
+        $negocios = $this->negociosVisibles()->sortBy('nombre');
 
         $fechaInicio = $request->input('fecha_inicio', now()->startOfMonth()->toDateString());
         $fechaFin    = $request->input('fecha_fin',    now()->toDateString());
         $negocioId   = $request->input('negocio_id');
 
-        // Cuentas con su negocio y banco
-        $cuentasQuery = Cuenta::with('negocio', 'banco')->orderBy('negocio_id');
+        // Cuentas con su negocio y banco — solo de negocios visibles
+        $cuentasQuery = $this->aplicarFiltroNegocio(Cuenta::with('negocio', 'banco'))->orderBy('negocio_id');
         if ($negocioId) {
             $cuentasQuery->where('negocio_id', $negocioId);
         }
