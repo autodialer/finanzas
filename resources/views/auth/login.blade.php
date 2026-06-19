@@ -78,6 +78,11 @@
                 <i class="bi bi-box-arrow-in-right me-2"></i>Entrar
             </button>
         </form>
+        <div class="text-center mt-3">
+            <a href="{{ route('password.request') }}" class="text-muted small">
+                ¿Olvidaste tu contraseña?
+            </a>
+        </div>
     </div>
 </body>
 </html>

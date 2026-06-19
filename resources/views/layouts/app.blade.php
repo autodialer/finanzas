@@ -7,6 +7,7 @@
     <title>@yield('titulo') — Finanzas</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
     <style>
         body {
             font-size: 0.9rem;
@@ -66,8 +67,14 @@
                     <a href="{{ route('gastos.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('gastos*') ? 'active' : '' }}">
                         <i class="bi bi-arrow-up-circle me-2"></i>Gastos
                     </a>
-                    <a href="{{ route('reportes.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('reportes*') ? 'active' : '' }}">
+                    <a href="{{ route('traspasos.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('traspasos*') ? 'active' : '' }}">
+                        <i class="bi bi-arrow-left-right me-2"></i>Traspasos
+                    </a>
+                    <a href="{{ route('reportes.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('reportes.index') ? 'active' : '' }}">
                         <i class="bi bi-bar-chart me-2"></i>Reportes
+                    </a>
+                    <a href="{{ route('reportes.cuentas') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('reportes.cuentas') ? 'active' : '' }}">
+                        <i class="bi bi-credit-card me-2"></i>Rep. Cuentas
                     </a>
                 </nav>
 
@@ -85,9 +92,6 @@
                 <nav class="nav flex-column mb-3">
                     <a href="{{ route('negocios.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('negocios*') ? 'active' : '' }}">
                         <i class="bi bi-building me-2"></i>Negocios
-                    </a>
-                    <a href="{{ route('areas.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('areas*') ? 'active' : '' }}">
-                        <i class="bi bi-diagram-3 me-2"></i>Áreas
                     </a>
                     <a href="{{ route('categorias.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('categorias*') ? 'active' : '' }}">
                         <i class="bi bi-tag me-2"></i>Categorías
@@ -109,10 +113,26 @@
                     </a>
                 </nav>
 
+                @if(auth()->user()->isAdmin())
+                <div class="nav-header mb-2">Administración</div>
+                <nav class="nav flex-column mb-3">
+                    <a href="{{ route('usuarios.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('usuarios*') ? 'active' : '' }}">
+                        <i class="bi bi-people me-2"></i>Usuarios
+                    </a>
+                </nav>
+                @endif
+
                 <div class="mt-auto pt-3 border-top border-secondary">
                     <p class="text-muted small mb-1 px-2">
                         <i class="bi bi-person-circle me-1"></i>{{ auth()->user()->name }}
+                        @if(auth()->user()->isAdmin())
+                            <span class="badge bg-secondary ms-1" style="font-size:0.65rem;">Admin</span>
+                        @endif
                     </p>
+                    <a href="{{ route('perfil.password.edit') }}"
+                       class="btn btn-sm btn-outline-secondary w-100 mb-2 {{ request()->routeIs('perfil.*') ? 'active' : '' }}">
+                        <i class="bi bi-key me-1"></i>Cambiar contraseña
+                    </a>
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf
                         <button type="submit" class="btn btn-sm btn-outline-secondary w-100">
@@ -136,11 +156,11 @@
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('dashboard') }}">Dashboard</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('ingresos.index') }}">Ingresos</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('gastos.index') }}">Gastos</a></li>
+                                <li class="nav-item"><a class="nav-link text-white" href="{{ route('traspasos.index') }}">Traspasos</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('reportes.index') }}">Reportes</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('nominas.index') }}">Nóminas</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('empleados.index') }}">Empleados</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('negocios.index') }}">Negocios</a></li>
-                                <li class="nav-item"><a class="nav-link text-white" href="{{ route('areas.index') }}">Áreas</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('categorias.index') }}">Categorías</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('clientes.index') }}">Clientes</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('vendedores.index') }}">Vendedores</a></li>
@@ -171,6 +191,17 @@
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            document.querySelectorAll('.ts-select').forEach(function (el) {
+                new TomSelect(el, {
+                    maxOptions: null,
+                    placeholder: el.dataset.placeholder || 'Buscar...',
+                });
+            });
+        });
+    </script>
 </body>
 
 </html>

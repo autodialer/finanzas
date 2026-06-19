@@ -17,7 +17,6 @@
                 <tr>
                     <th>Fecha</th>
                     <th>Negocio</th>
-                    <th>Área</th>
                     <th>Categoría</th>
                     <th>Cliente</th>
                     <th>Concepto</th>
@@ -26,6 +25,7 @@
                     <th class="text-end">Subtotal</th>
                     <th class="text-end">IVA</th>
                     <th class="text-end">Total</th>
+                    <th>Registró</th>
                     <th>Acciones</th>
                 </tr>
             </thead>
@@ -34,7 +34,6 @@
                 <tr>
                     <td>{{ \Carbon\Carbon::parse($ingreso->fecha)->format('d/m/Y') }}</td>
                     <td>{{ $ingreso->negocio->nombre }}</td>
-                    <td>{{ $ingreso->area->nombre ?? '-' }}</td>
                     <td>{{ $ingreso->categoria->nombre }}</td>
                     <td>{{ $ingreso->cliente->nombre ?? '-' }}</td>
                     <td>{{ $ingreso->concepto }}</td>
@@ -55,6 +54,7 @@
                         @if($ingreso->tiene_iva) ${{ number_format($ingreso->monto_iva, 2) }} @else - @endif
                     </td>
                     <td class="text-end text-success fw-bold">${{ number_format($ingreso->monto, 2) }}</td>
+                    <td class="text-muted small">{{ $ingreso->user->name ?? '-' }}</td>
                     <td>
                         <a href="{{ route('ingresos.edit', $ingreso) }}" class="btn btn-sm btn-warning">
                             <i class="bi bi-pencil"></i>
@@ -69,7 +69,7 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="11" class="text-center text-muted">Sin registros</td>
+                    <td colspan="12" class="text-center text-muted">Sin registros</td>
                 </tr>
                 @endforelse
             </tbody>

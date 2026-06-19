@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Gasto extends Model
 {
     protected $table = 'gastos';
-    protected $fillable = ['negocio_id', 'area_id', 'categoria_id', 'proveedor_id', 'cuenta_id', 'monto', 'fecha', 'concepto', 'forma_pago', 'notas', 'tiene_iva', 'monto_iva'];
+    protected $fillable = ['negocio_id', 'categoria_id', 'proveedor_id', 'cuenta_id', 'user_id', 'monto', 'fecha', 'concepto', 'forma_pago', 'notas', 'tiene_iva', 'monto_iva'];
 
     protected $casts = ['tiene_iva' => 'boolean', 'monto_iva' => 'decimal:2'];
 
@@ -20,10 +20,6 @@ class Gasto extends Model
     {
         return $this->belongsTo(Negocio::class);
     }
-    public function area()
-    {
-        return $this->belongsTo(Area::class);
-    }
     public function categoria()
     {
         return $this->belongsTo(Categoria::class);
@@ -35,5 +31,9 @@ class Gasto extends Model
     public function cuenta()
     {
         return $this->belongsTo(Cuenta::class);
+    }
+    public function user()
+    {
+        return $this->belongsTo(\App\Models\User::class);
     }
 }

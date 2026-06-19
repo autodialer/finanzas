@@ -17,7 +17,6 @@
                 <tr>
                     <th>Fecha</th>
                     <th>Negocio</th>
-                    <th>Área</th>
                     <th>Categoría</th>
                     <th>Proveedor</th>
                     <th>Concepto</th>
@@ -26,6 +25,7 @@
                     <th class="text-end">Subtotal</th>
                     <th class="text-end">IVA</th>
                     <th class="text-end">Total</th>
+                    <th>Registró</th>
                     <th>Acciones</th>
                 </tr>
             </thead>
@@ -34,7 +34,6 @@
                 <tr>
                     <td>{{ \Carbon\Carbon::parse($gasto->fecha)->format('d/m/Y') }}</td>
                     <td>{{ $gasto->negocio->nombre }}</td>
-                    <td>{{ $gasto->area->nombre ?? '-' }}</td>
                     <td>{{ $gasto->categoria->nombre }}</td>
                     <td>{{ $gasto->proveedor->nombre ?? '-' }}</td>
                     <td>{{ $gasto->concepto }}</td>
@@ -55,6 +54,7 @@
                         @if($gasto->tiene_iva) ${{ number_format($gasto->monto_iva, 2) }} @else - @endif
                     </td>
                     <td class="text-end text-danger fw-bold">${{ number_format($gasto->monto, 2) }}</td>
+                    <td class="text-muted small">{{ $gasto->user->name ?? '-' }}</td>
                     <td>
                         <a href="{{ route('gastos.edit', $gasto) }}" class="btn btn-sm btn-warning">
                             <i class="bi bi-pencil"></i>

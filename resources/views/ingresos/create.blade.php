@@ -39,15 +39,6 @@
                     @error('negocio_id') <div class="text-danger small">{{ $message }}</div> @enderror
                 </div>
                 <div class="col-md-6 mb-3">
-                    <label class="form-label">Área <span class="text-muted small">(opcional)</span></label>
-                    <select name="area_id" class="form-select">
-                        <option value="">Sin área</option>
-                        @foreach($areas as $area)
-                        <option value="{{ $area->id }}" {{ old('area_id') == $area->id ? 'selected' : '' }}>{{ $area->negocio->nombre }} — {{ $area->nombre }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="col-md-6 mb-3">
                     <label class="form-label">Categoría</label>
                     <select name="categoria_id" class="form-select">
                         <option value="">Selecciona una categoría</option>
@@ -59,7 +50,7 @@
                 </div>
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Cliente <span class="text-muted small">(opcional)</span></label>
-                    <select name="cliente_id" class="form-select">
+                    <select name="cliente_id" class="form-select ts-select" data-placeholder="Sin cliente">
                         <option value="">Sin cliente</option>
                         @foreach($clientes as $cliente)
                         <option value="{{ $cliente->id }}" {{ old('cliente_id') == $cliente->id ? 'selected' : '' }}>{{ $cliente->nombre }}</option>
@@ -68,7 +59,7 @@
                 </div>
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Cuenta</label>
-                    <select name="cuenta_id" class="form-select">
+                    <select name="cuenta_id" class="form-select ts-select" data-placeholder="Selecciona una cuenta">
                         <option value="">Selecciona una cuenta</option>
                         @foreach($cuentas as $cuenta)
                         <option value="{{ $cuenta->id }}" {{ old('cuenta_id') == $cuenta->id ? 'selected' : '' }}>{{ $cuenta->negocio->nombre }} — {{ $cuenta->nombre }}</option>

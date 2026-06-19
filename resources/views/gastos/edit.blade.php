@@ -40,15 +40,6 @@
                     @error('negocio_id') <div class="text-danger small">{{ $message }}</div> @enderror
                 </div>
                 <div class="col-md-6 mb-3">
-                    <label class="form-label">Área <span class="text-muted small">(opcional)</span></label>
-                    <select name="area_id" class="form-select">
-                        <option value="">Sin área</option>
-                        @foreach($areas as $area)
-                        <option value="{{ $area->id }}" {{ old('area_id', $gasto->area_id) == $area->id ? 'selected' : '' }}>{{ $area->negocio->nombre }} — {{ $area->nombre }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="col-md-6 mb-3">
                     <label class="form-label">Categoría</label>
                     <select name="categoria_id" class="form-select">
                         <option value="">Selecciona una categoría</option>
@@ -60,7 +51,7 @@
                 </div>
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Proveedor <span class="text-muted small">(opcional)</span></label>
-                    <select name="proveedor_id" class="form-select">
+                    <select name="proveedor_id" class="form-select ts-select" data-placeholder="Sin proveedor">
                         <option value="">Sin proveedor</option>
                         @foreach($proveedores as $proveedor)
                         <option value="{{ $proveedor->id }}" {{ old('proveedor_id', $gasto->proveedor_id) == $proveedor->id ? 'selected' : '' }}>{{ $proveedor->nombre }}</option>
@@ -69,7 +60,7 @@
                 </div>
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Cuenta</label>
-                    <select name="cuenta_id" class="form-select">
+                    <select name="cuenta_id" class="form-select ts-select" data-placeholder="Selecciona una cuenta">
                         <option value="">Selecciona una cuenta</option>
                         @foreach($cuentas as $cuenta)
                         <option value="{{ $cuenta->id }}" {{ old('cuenta_id', $gasto->cuenta_id) == $cuenta->id ? 'selected' : '' }}>{{ $cuenta->negocio->nombre }} — {{ $cuenta->nombre }}</option>
@@ -92,24 +83,19 @@
                 <div class="col-12 mb-3" id="seccion-iva" style="display:none">
                     <div class="card border-warning">
                         <div class="card-body py-2 px-3">
-                            <div id="iva-checkbox-wrap" style="display:none" class="mb-2">
-                                <div class="form-check form-switch">
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                <div class="form-check form-switch mb-0">
                                     <input class="form-check-input" type="checkbox" name="tiene_iva" id="tiene_iva"
                                            value="1" onchange="actualizarIva()"
                                            {{ old('tiene_iva', $gasto->tiene_iva) ? 'checked' : '' }}>
                                     <label class="form-check-label fw-semibold" for="tiene_iva">
-                                        ¿Este gasto incluye IVA (16%)?
+                                        Incluye IVA (16%)
                                     </label>
                                 </div>
-                            </div>
-                            <div id="iva-desglose" style="display:none">
-                                <div class="row g-2 align-items-center">
-                                    <div class="col-auto text-muted small">Subtotal (sin IVA):</div>
-                                    <div class="col-auto fw-bold" id="txt-base">$0.00</div>
-                                    <div class="col-auto text-muted small ms-3">IVA 16%:</div>
-                                    <div class="col-auto fw-bold text-warning" id="txt-iva">$0.00</div>
-                                    <div class="col-auto text-muted small ms-3">Total:</div>
-                                    <div class="col-auto fw-bold text-danger" id="txt-total">$0.00</div>
+                                <div id="iva-desglose" class="d-flex flex-wrap gap-3 align-items-center">
+                                    <span class="text-muted small">Subtotal: <strong id="txt-base">$0.00</strong></span>
+                                    <span class="text-muted small">IVA 16%: <strong class="text-warning" id="txt-iva">$0.00</strong></span>
+                                    <span class="text-muted small">Total: <strong class="text-danger" id="txt-total">$0.00</strong></span>
                                 </div>
                             </div>
                         </div>
@@ -133,51 +119,33 @@
 
 <script>
 function manejarFormaPago() {
-    const forma = document.getElementById('forma_pago').value;
+    const forma   = document.getElementById('forma_pago').value;
     const seccion = document.getElementById('seccion-iva');
-    const checkboxWrap = document.getElementById('iva-checkbox-wrap');
-    const desglose = document.getElementById('iva-desglose');
-    const checkbox = document.getElementById('tiene_iva');
-
-    if (forma === 'transferencia' || forma === 'tarjeta') {
-        seccion.style.display = '';
-        checkboxWrap.style.display = 'none';
-        desglose.style.display = '';
-        actualizarIva(true);
-    } else if (forma === 'efectivo') {
-        seccion.style.display = '';
-        checkboxWrap.style.display = '';
-        desglose.style.display = checkbox.checked ? '' : 'none';
-        if (checkbox.checked) actualizarIva(true);
-    } else {
-        seccion.style.display = 'none';
-    }
+    seccion.style.display = forma ? '' : 'none';
+    actualizarIva();
 }
 
-function actualizarIva(forzar) {
-    const forma = document.getElementById('forma_pago').value;
+function actualizarIva() {
     const checkbox = document.getElementById('tiene_iva');
     const desglose = document.getElementById('iva-desglose');
-    const monto = parseFloat(document.getElementById('monto').value) || 0;
+    const monto    = parseFloat(document.getElementById('monto').value) || 0;
 
-    const aplica = forzar || (forma !== 'efectivo') || checkbox.checked;
-
-    if (forma === 'efectivo' && !forzar) {
-        desglose.style.display = checkbox.checked ? '' : 'none';
-    }
-
-    if (aplica) {
-        const iva = Math.round(monto * 16 / 116 * 100) / 100;
+    if (checkbox.checked) {
+        const iva  = Math.round(monto * 16 / 116 * 100) / 100;
         const base = Math.round((monto - iva) * 100) / 100;
-        document.getElementById('txt-base').textContent = '$' + base.toFixed(2);
-        document.getElementById('txt-iva').textContent = '$' + iva.toFixed(2);
+        document.getElementById('txt-base').textContent  = '$' + base.toFixed(2);
+        document.getElementById('txt-iva').textContent   = '$' + iva.toFixed(2);
         document.getElementById('txt-total').textContent = '$' + monto.toFixed(2);
+        desglose.style.display = '';
+    } else {
+        desglose.style.display = 'none';
     }
 }
 
 document.addEventListener('DOMContentLoaded', function() {
     const forma = document.getElementById('forma_pago').value;
     if (forma) manejarFormaPago();
+    else actualizarIva();
 });
 </script>
 @endsection

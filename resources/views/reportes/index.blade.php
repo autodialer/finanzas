@@ -23,17 +23,6 @@
                     </select>
                 </div>
                 <div class="col-md-4 mb-3">
-                    <label class="form-label">Área</label>
-                    <select name="area_id" class="form-select">
-                        <option value="">Todas</option>
-                        @foreach($areas as $area)
-                        <option value="{{ $area->id }}" {{ ($filtros['area_id'] ?? '') == $area->id ? 'selected' : '' }}>
-                            {{ $area->negocio->nombre }} — {{ $area->nombre }}
-                        </option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="col-md-4 mb-3">
                     <label class="form-label">Categoría</label>
                     <select name="categoria_id" class="form-select">
                         <option value="">Todas</option>
@@ -115,7 +104,6 @@
                 <tr>
                     <th>Fecha</th>
                     <th>Negocio</th>
-                    <th>Área</th>
                     <th>Categoría</th>
                     <th>Cliente</th>
                     <th>Concepto</th>
@@ -128,7 +116,6 @@
                 <tr>
                     <td>{{ \Carbon\Carbon::parse($ingreso->fecha)->format('d/m/Y') }}</td>
                     <td>{{ $ingreso->negocio->nombre }}</td>
-                    <td>{{ $ingreso->area->nombre ?? '-' }}</td>
                     <td>{{ $ingreso->categoria->nombre }}</td>
                     <td>{{ $ingreso->cliente->nombre ?? '-' }}</td>
                     <td>{{ $ingreso->concepto }}</td>
@@ -160,7 +147,6 @@
                 <tr>
                     <th>Fecha</th>
                     <th>Negocio</th>
-                    <th>Área</th>
                     <th>Categoría</th>
                     <th>Proveedor</th>
                     <th>Concepto</th>
@@ -173,7 +159,6 @@
                 <tr>
                     <td>{{ \Carbon\Carbon::parse($gasto->fecha)->format('d/m/Y') }}</td>
                     <td>{{ $gasto->negocio->nombre }}</td>
-                    <td>{{ $gasto->area->nombre ?? '-' }}</td>
                     <td>{{ $gasto->categoria->nombre }}</td>
                     <td>{{ $gasto->proveedor->nombre ?? '-' }}</td>
                     <td>{{ $gasto->concepto }}</td>

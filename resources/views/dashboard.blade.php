@@ -106,6 +106,46 @@
     </div>
 </div>
 
+<!-- Saldo disponible en cuentas -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span class="fw-bold">Saldo disponible en cuentas</span>
+                <span class="fs-5 fw-bold {{ $saldoTotalCuentas >= 0 ? 'text-success' : 'text-danger' }}">
+                    Total: ${{ number_format($saldoTotalCuentas, 2) }}
+                </span>
+            </div>
+            <div class="card-body p-0">
+                <table class="table mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Cuenta</th>
+                            <th>Negocio</th>
+                            <th class="text-end">Total entradas</th>
+                            <th class="text-end">Total salidas</th>
+                            <th class="text-end">Saldo disponible</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($cuentasConSaldo as $cuenta)
+                        <tr>
+                            <td>{{ $cuenta->nombre }}</td>
+                            <td class="text-muted small">{{ $cuenta->negocio->nombre ?? '-' }}</td>
+                            <td class="text-end text-success">${{ number_format($cuenta->total_entradas, 2) }}</td>
+                            <td class="text-end text-danger">${{ number_format($cuenta->total_salidas, 2) }}</td>
+                            <td class="text-end fw-bold {{ $cuenta->saldo >= 0 ? 'text-success' : 'text-danger' }}">
+                                ${{ number_format($cuenta->saldo, 2) }}
+                            </td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Resumen por negocio -->
 <div class="row mb-4">
     <div class="col-md-6 mb-3">
@@ -171,6 +211,7 @@
                     <th>Tipo</th>
                     <th>Negocio</th>
                     <th>Concepto</th>
+                    <th>Registró</th>
                     <th class="text-end">Monto</th>
                 </tr>
             </thead>
@@ -187,6 +228,7 @@
                     </td>
                     <td>{{ $movimiento['negocio'] }}</td>
                     <td>{{ $movimiento['concepto'] }}</td>
+                    <td class="text-muted small">{{ $movimiento['registrado_por'] }}</td>
                     <td class="text-end fw-bold {{ $movimiento['tipo'] == 'ingreso' ? 'text-success' : 'text-danger' }}">
                         ${{ number_format($movimiento['monto'], 2) }}
                     </td>

@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Ingreso;
 use App\Models\Negocio;
-use App\Models\Area;
 use App\Models\Categoria;
 use App\Models\Cliente;
 use App\Models\Cuenta;
@@ -14,8 +13,9 @@ class IngresoController extends Controller
 {
     public function index()
     {
-        $ingresos = Ingreso::with('negocio', 'area', 'categoria', 'cliente', 'cuenta')
-            ->latest()
+        $ingresos = Ingreso::with('negocio', 'categoria', 'cliente', 'cuenta', 'user')
+            ->orderBy('fecha', 'desc')
+            ->orderBy('created_at', 'desc')
             ->get();
         return view('ingresos.index', compact('ingresos'));
     }
@@ -23,11 +23,10 @@ class IngresoController extends Controller
     public function create()
     {
         $negocios = Negocio::all();
-        $areas = Area::with('negocio')->get();
         $categorias = Categoria::whereIn('tipo', ['ingreso', 'ambos'])->get();
-        $clientes = Cliente::all();
-        $cuentas = Cuenta::with('negocio')->get();
-        return view('ingresos.create', compact('negocios', 'areas', 'categorias', 'clientes', 'cuentas'));
+        $clientes = Cliente::orderBy('nombre')->get();
+        $cuentas = Cuenta::with('negocio')->orderBy('nombre')->get();
+        return view('ingresos.create', compact('negocios', 'categorias', 'clientes', 'cuentas'));
     }
 
     public function store(Request $request)
@@ -43,7 +42,7 @@ class IngresoController extends Controller
         ]);
 
         $data = $request->except(['tiene_iva', 'monto_iva']);
-        $data = array_merge($data, $this->calcularIva($request));
+        $data = array_merge($data, $this->calcularIva($request), ['user_id' => auth()->id()]);
 
         Ingreso::create($data);
         return redirect()->route('ingresos.index')->with('exito', 'Ingreso registrado correctamente.');
@@ -52,11 +51,10 @@ class IngresoController extends Controller
     public function edit(Ingreso $ingreso)
     {
         $negocios = Negocio::all();
-        $areas = Area::with('negocio')->get();
         $categorias = Categoria::whereIn('tipo', ['ingreso', 'ambos'])->get();
-        $clientes = Cliente::all();
-        $cuentas = Cuenta::with('negocio')->get();
-        return view('ingresos.edit', compact('ingreso', 'negocios', 'areas', 'categorias', 'clientes', 'cuentas'));
+        $clientes = Cliente::orderBy('nombre')->get();
+        $cuentas = Cuenta::with('negocio')->orderBy('nombre')->get();
+        return view('ingresos.edit', compact('ingreso', 'negocios', 'categorias', 'clientes', 'cuentas'));
     }
 
     public function update(Request $request, Ingreso $ingreso)

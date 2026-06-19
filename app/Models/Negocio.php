@@ -9,10 +9,6 @@ class Negocio extends Model
     protected $table = 'negocios';
     protected $fillable = ['nombre', 'descripcion'];
 
-    public function areas()
-    {
-        return $this->hasMany(Area::class);
-    }
     public function cuentas()
     {
         return $this->hasMany(Cuenta::class);

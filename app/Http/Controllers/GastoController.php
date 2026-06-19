@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Gasto;
 use App\Models\Negocio;
-use App\Models\Area;
 use App\Models\Categoria;
 use App\Models\Proveedor;
 use App\Models\Cuenta;
@@ -14,8 +13,9 @@ class GastoController extends Controller
 {
     public function index()
     {
-        $gastos = Gasto::with('negocio', 'area', 'categoria', 'proveedor', 'cuenta')
-            ->latest()
+        $gastos = Gasto::with('negocio', 'categoria', 'proveedor', 'cuenta', 'user')
+            ->orderBy('fecha', 'desc')
+            ->orderBy('created_at', 'desc')
             ->get();
         return view('gastos.index', compact('gastos'));
     }
@@ -23,11 +23,10 @@ class GastoController extends Controller
     public function create()
     {
         $negocios = Negocio::all();
-        $areas = Area::with('negocio')->get();
         $categorias = Categoria::whereIn('tipo', ['gasto', 'ambos'])->get();
-        $proveedores = Proveedor::all();
-        $cuentas = Cuenta::with('negocio')->get();
-        return view('gastos.create', compact('negocios', 'areas', 'categorias', 'proveedores', 'cuentas'));
+        $proveedores = Proveedor::orderBy('nombre')->get();
+        $cuentas = Cuenta::with('negocio')->orderBy('nombre')->get();
+        return view('gastos.create', compact('negocios', 'categorias', 'proveedores', 'cuentas'));
     }
 
     public function store(Request $request)
@@ -43,7 +42,7 @@ class GastoController extends Controller
         ]);
 
         $data = $request->except(['tiene_iva', 'monto_iva']);
-        $data = array_merge($data, $this->calcularIva($request));
+        $data = array_merge($data, $this->calcularIva($request), ['user_id' => auth()->id()]);
 
         Gasto::create($data);
         return redirect()->route('gastos.index')->with('exito', 'Gasto registrado correctamente.');
@@ -52,11 +51,10 @@ class GastoController extends Controller
     public function edit(Gasto $gasto)
     {
         $negocios = Negocio::all();
-        $areas = Area::with('negocio')->get();
         $categorias = Categoria::whereIn('tipo', ['gasto', 'ambos'])->get();
-        $proveedores = Proveedor::all();
-        $cuentas = Cuenta::with('negocio')->get();
-        return view('gastos.edit', compact('gasto', 'negocios', 'areas', 'categorias', 'proveedores', 'cuentas'));
+        $proveedores = Proveedor::orderBy('nombre')->get();
+        $cuentas = Cuenta::with('negocio')->orderBy('nombre')->get();
+        return view('gastos.edit', compact('gasto', 'negocios', 'categorias', 'proveedores', 'cuentas'));
     }
 
     public function update(Request $request, Gasto $gasto)
@@ -80,16 +78,8 @@ class GastoController extends Controller
 
     private function calcularIva(Request $request): array
     {
-        $forma = $request->forma_pago;
         $monto = (float) $request->monto;
 
-        // Transferencia y tarjeta siempre llevan IVA
-        if (in_array($forma, ['transferencia', 'tarjeta'])) {
-            $monto_iva = round($monto * 16 / 116, 2);
-            return ['tiene_iva' => true, 'monto_iva' => $monto_iva];
-        }
-
-        // Efectivo: el usuario decide
         if ($request->boolean('tiene_iva')) {
             $monto_iva = round($monto * 16 / 116, 2);
             return ['tiene_iva' => true, 'monto_iva' => $monto_iva];
