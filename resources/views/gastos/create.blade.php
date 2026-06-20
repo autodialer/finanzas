@@ -78,25 +78,52 @@
                     @error('forma_pago') <div class="text-danger small">{{ $message }}</div> @enderror
                 </div>
 
+                {{-- Sección Propina --}}
+                <div class="col-12 mb-3">
+                    <div class="card border-secondary">
+                        <div class="card-body py-2 px-3">
+                            <div class="d-flex align-items-center flex-wrap gap-3">
+                                <div class="form-check form-switch mb-0">
+                                    <input class="form-check-input" type="checkbox" name="tiene_propina" id="tiene_propina"
+                                           value="1" onchange="actualizarDesglose()"
+                                           {{ old('tiene_propina') ? 'checked' : '' }}>
+                                    <label class="form-check-label fw-semibold" for="tiene_propina">
+                                        Incluye propina
+                                    </label>
+                                </div>
+                                <div id="propina-campos" class="d-flex align-items-center gap-2" style="{{ old('tiene_propina') ? '' : 'display:none!important' }}">
+                                    <label class="mb-0 small text-muted">Porcentaje:</label>
+                                    <div class="input-group input-group-sm" style="width:100px">
+                                        <input type="number" step="1" min="0" max="100" name="porcentaje_propina"
+                                               id="porcentaje_propina" class="form-control"
+                                               value="{{ old('porcentaje_propina', 20) }}"
+                                               oninput="actualizarDesglose()">
+                                        <span class="input-group-text">%</span>
+                                    </div>
+                                    <span class="text-muted small">Propina: <strong class="text-secondary" id="txt-propina">$0.00</strong></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 {{-- Sección IVA --}}
                 <div class="col-12 mb-3" id="seccion-iva" style="display:none">
                     <div class="card border-warning">
                         <div class="card-body py-2 px-3">
                             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                {{-- Switch siempre visible --}}
                                 <div class="form-check form-switch mb-0">
                                     <input class="form-check-input" type="checkbox" name="tiene_iva" id="tiene_iva"
-                                           value="1" onchange="actualizarIva()"
+                                           value="1" onchange="actualizarDesglose()"
                                            {{ old('tiene_iva', '1') ? 'checked' : '' }}>
                                     <label class="form-check-label fw-semibold" for="tiene_iva">
                                         Incluye IVA (16%)
                                     </label>
                                 </div>
-                                {{-- Desglose --}}
                                 <div id="iva-desglose" class="d-flex flex-wrap gap-3 align-items-center">
                                     <span class="text-muted small">Subtotal: <strong id="txt-base">$0.00</strong></span>
                                     <span class="text-muted small">IVA 16%: <strong class="text-warning" id="txt-iva">$0.00</strong></span>
-                                    <span class="text-muted small">Total: <strong class="text-danger" id="txt-total">$0.00</strong></span>
+                                    <span class="text-muted small">Total c/IVA: <strong class="text-danger" id="txt-total">$0.00</strong></span>
                                 </div>
                             </div>
                         </div>
@@ -120,33 +147,44 @@
 
 <script>
 function manejarFormaPago() {
-    const forma   = document.getElementById('forma_pago').value;
-    const seccion = document.getElementById('seccion-iva');
-    seccion.style.display = forma ? '' : 'none';
-    actualizarIva();
+    const forma = document.getElementById('forma_pago').value;
+    document.getElementById('seccion-iva').style.display = forma ? '' : 'none';
+    actualizarDesglose();
 }
 
-function actualizarIva() {
-    const checkbox  = document.getElementById('tiene_iva');
-    const desglose  = document.getElementById('iva-desglose');
-    const monto     = parseFloat(document.getElementById('monto').value) || 0;
+function actualizarDesglose() {
+    const monto      = parseFloat(document.getElementById('monto').value) || 0;
+    const conPropina = document.getElementById('tiene_propina').checked;
+    const conIva     = document.getElementById('tiene_iva').checked;
 
-    if (checkbox.checked) {
-        const iva  = Math.round(monto * 16 / 116 * 100) / 100;
-        const base = Math.round((monto - iva) * 100) / 100;
+    // Mostrar/ocultar campos de propina
+    document.getElementById('propina-campos').style.display = conPropina ? '' : 'none';
+
+    let montoPropina = 0;
+    if (conPropina) {
+        const pct    = parseFloat(document.getElementById('porcentaje_propina').value) || 0;
+        montoPropina = Math.round(monto * pct / (100 + pct) * 100) / 100;
+        document.getElementById('txt-propina').textContent = '$' + montoPropina.toFixed(2);
+    }
+
+    const baseParaIva = monto - montoPropina;
+
+    if (conIva) {
+        const iva  = Math.round(baseParaIva * 16 / 116 * 100) / 100;
+        const base = Math.round((baseParaIva - iva) * 100) / 100;
         document.getElementById('txt-base').textContent  = '$' + base.toFixed(2);
         document.getElementById('txt-iva').textContent   = '$' + iva.toFixed(2);
-        document.getElementById('txt-total').textContent = '$' + monto.toFixed(2);
-        desglose.style.display = '';
+        document.getElementById('txt-total').textContent = '$' + baseParaIva.toFixed(2);
+        document.getElementById('iva-desglose').style.display = '';
     } else {
-        desglose.style.display = 'none';
+        document.getElementById('iva-desglose').style.display = 'none';
     }
 }
 
 document.addEventListener('DOMContentLoaded', function() {
     const forma = document.getElementById('forma_pago').value;
     if (forma) manejarFormaPago();
-    else actualizarIva();
+    else actualizarDesglose();
 });
 </script>
 @endsection

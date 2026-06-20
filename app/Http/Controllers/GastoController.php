@@ -31,17 +31,18 @@ class GastoController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'negocio_id'  => 'required|exists:negocios,id',
-            'categoria_id'=> 'required|exists:categorias,id',
-            'cuenta_id'   => 'required|exists:cuentas,id',
-            'monto'       => 'required|numeric|min:0',
-            'fecha'       => 'required|date',
-            'concepto'    => 'required',
-            'forma_pago'  => 'required|in:efectivo,transferencia,tarjeta',
+            'negocio_id'        => 'required|exists:negocios,id',
+            'categoria_id'      => 'required|exists:categorias,id',
+            'cuenta_id'         => 'required|exists:cuentas,id',
+            'monto'             => 'required|numeric|min:0',
+            'fecha'             => 'required|date',
+            'concepto'          => 'required',
+            'forma_pago'        => 'required|in:efectivo,transferencia,tarjeta',
+            'porcentaje_propina'=> 'nullable|numeric|min:0|max:100',
         ]);
 
-        $data = $request->except(['tiene_iva', 'monto_iva']);
-        $data = array_merge($data, $this->calcularIva($request), ['user_id' => auth()->id()]);
+        $data = $request->except(['tiene_iva', 'monto_iva', 'tiene_propina', 'monto_propina', 'porcentaje_propina']);
+        $data = array_merge($data, $this->calcularPropinaeIva($request), ['user_id' => auth()->id()]);
 
         Gasto::create($data);
         return redirect()->route('gastos.index')->with('exito', 'Gasto registrado correctamente.');
@@ -59,32 +60,53 @@ class GastoController extends Controller
     public function update(Request $request, Gasto $gasto)
     {
         $request->validate([
-            'negocio_id'  => 'required|exists:negocios,id',
-            'categoria_id'=> 'required|exists:categorias,id',
-            'cuenta_id'   => 'required|exists:cuentas,id',
-            'monto'       => 'required|numeric|min:0',
-            'fecha'       => 'required|date',
-            'concepto'    => 'required',
-            'forma_pago'  => 'required|in:efectivo,transferencia,tarjeta',
+            'negocio_id'        => 'required|exists:negocios,id',
+            'categoria_id'      => 'required|exists:categorias,id',
+            'cuenta_id'         => 'required|exists:cuentas,id',
+            'monto'             => 'required|numeric|min:0',
+            'fecha'             => 'required|date',
+            'concepto'          => 'required',
+            'forma_pago'        => 'required|in:efectivo,transferencia,tarjeta',
+            'porcentaje_propina'=> 'nullable|numeric|min:0|max:100',
         ]);
 
-        $data = $request->except(['tiene_iva', 'monto_iva']);
-        $data = array_merge($data, $this->calcularIva($request));
+        $data = $request->except(['tiene_iva', 'monto_iva', 'tiene_propina', 'monto_propina', 'porcentaje_propina']);
+        $data = array_merge($data, $this->calcularPropinaeIva($request));
 
         $gasto->update($data);
         return redirect()->route('gastos.index')->with('exito', 'Gasto actualizado correctamente.');
     }
 
-    private function calcularIva(Request $request): array
+    private function calcularPropinaeIva(Request $request): array
     {
         $monto = (float) $request->monto;
+        $result = [];
 
-        if ($request->boolean('tiene_iva')) {
-            $monto_iva = round($monto * 16 / 116, 2);
-            return ['tiene_iva' => true, 'monto_iva' => $monto_iva];
+        // Calcular propina
+        if ($request->boolean('tiene_propina')) {
+            $pct             = (float) ($request->porcentaje_propina ?? 20);
+            $monto_propina   = round($monto * $pct / (100 + $pct), 2);
+            $base_para_iva   = $monto - $monto_propina;
+            $result['tiene_propina']     = true;
+            $result['porcentaje_propina']= $pct;
+            $result['monto_propina']     = $monto_propina;
+        } else {
+            $base_para_iva = $monto;
+            $result['tiene_propina']     = false;
+            $result['porcentaje_propina']= 0;
+            $result['monto_propina']     = 0;
         }
 
-        return ['tiene_iva' => false, 'monto_iva' => 0];
+        // Calcular IVA sobre la base (sin propina)
+        if ($request->boolean('tiene_iva')) {
+            $result['tiene_iva']  = true;
+            $result['monto_iva']  = round($base_para_iva * 16 / 116, 2);
+        } else {
+            $result['tiene_iva']  = false;
+            $result['monto_iva']  = 0;
+        }
+
+        return $result;
     }
 
     public function destroy(Gasto $gasto)
