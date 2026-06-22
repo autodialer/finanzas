@@ -19,8 +19,8 @@ class ReporteController extends Controller
 
         $filtros = $request->only(['negocio_id', 'categoria_id', 'fecha_inicio', 'fecha_fin', 'tipo']);
 
-        $queryIngresos = $this->aplicarFiltroNegocio(Ingreso::with('negocio', 'categoria', 'cliente', 'cuenta'));
-        $queryGastos   = $this->aplicarFiltroNegocio(Gasto::with('negocio', 'categoria', 'proveedor', 'cuenta'));
+        $queryIngresos = $this->aplicarFiltroReportes(Ingreso::with('negocio', 'categoria', 'cliente', 'cuenta'));
+        $queryGastos   = $this->aplicarFiltroReportes(Gasto::with('negocio', 'categoria', 'proveedor', 'cuenta'));
 
         if (!empty($filtros['negocio_id'])) {
             $queryIngresos->where('negocio_id', $filtros['negocio_id']);

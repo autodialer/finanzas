@@ -31,4 +31,23 @@ abstract class Controller
         }
         return $q->get();
     }
+
+    // Todos los negocios para formularios de captura (gerentes pueden capturar en negocios privados).
+    protected function negociosParaCaptura()
+    {
+        return \App\Models\Negocio::orderBy('nombre')->get();
+    }
+
+    // Filtra reportes/listados: no-admin ve registros de negocios públicos + los que él mismo capturó.
+    protected function aplicarFiltroReportes($query, string $columna = 'negocio_id')
+    {
+        if (auth()->user()->isAdmin()) {
+            return $query;
+        }
+        $negociosPublicos = \App\Models\Negocio::where('privado', false)->pluck('id');
+        return $query->where(function ($q) use ($negociosPublicos, $columna) {
+            $q->whereIn($columna, $negociosPublicos)
+              ->orWhere('user_id', auth()->id());
+        });
+    }
 }

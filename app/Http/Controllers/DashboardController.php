@@ -17,18 +17,18 @@ class DashboardController extends Controller
         $anioActual = now()->year;
         $ids        = $this->negociosPermitidos(); // null = admin, collection = restringido
 
-        $totalIngresosMes = $this->aplicarFiltroNegocio(Ingreso::query())
+        $totalIngresosMes = $this->aplicarFiltroReportes(Ingreso::query())
             ->whereMonth('fecha', $mesActual)->whereYear('fecha', $anioActual)->sum('monto');
 
-        $totalGastosMes = $this->aplicarFiltroNegocio(Gasto::query())
+        $totalGastosMes = $this->aplicarFiltroReportes(Gasto::query())
             ->whereMonth('fecha', $mesActual)->whereYear('fecha', $anioActual)->sum('monto');
 
         $balanceMes = $totalIngresosMes - $totalGastosMes;
 
-        $ivaCobradomMes = $this->aplicarFiltroNegocio(Ingreso::query())
+        $ivaCobradomMes = $this->aplicarFiltroReportes(Ingreso::query())
             ->whereMonth('fecha', $mesActual)->whereYear('fecha', $anioActual)->sum('monto_iva');
 
-        $ivaPagadoMes = $this->aplicarFiltroNegocio(Gasto::query())
+        $ivaPagadoMes = $this->aplicarFiltroReportes(Gasto::query())
             ->whereMonth('fecha', $mesActual)->whereYear('fecha', $anioActual)->sum('monto_iva');
 
         $saldoIva = $ivaCobradomMes - $ivaPagadoMes;
@@ -71,7 +71,7 @@ class DashboardController extends Controller
         $saldoTotalCuentas = $cuentasConSaldo->sum('saldo');
 
         $ultimosMovimientos = collect()
-            ->merge($this->aplicarFiltroNegocio(Ingreso::with('negocio', 'categoria', 'user'))->latest()->take(5)->get()->map(fn($i) => [
+            ->merge($this->aplicarFiltroReportes(Ingreso::with('negocio', 'categoria', 'user'))->latest()->take(5)->get()->map(fn($i) => [
                 'fecha'          => $i->fecha,
                 'tipo'           => 'ingreso',
                 'negocio'        => $i->negocio->nombre,
@@ -79,7 +79,7 @@ class DashboardController extends Controller
                 'monto'          => $i->monto,
                 'registrado_por' => $i->user->name ?? '-',
             ]))
-            ->merge($this->aplicarFiltroNegocio(Gasto::with('negocio', 'categoria', 'user'))->latest()->take(5)->get()->map(fn($g) => [
+            ->merge($this->aplicarFiltroReportes(Gasto::with('negocio', 'categoria', 'user'))->latest()->take(5)->get()->map(fn($g) => [
                 'fecha'          => $g->fecha,
                 'tipo'           => 'gasto',
                 'negocio'        => $g->negocio->nombre,

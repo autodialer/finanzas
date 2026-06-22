@@ -13,7 +13,7 @@ class GastoController extends Controller
 {
     public function index()
     {
-        $gastos = $this->aplicarFiltroNegocio(
+        $gastos = $this->aplicarFiltroReportes(
             Gasto::with('negocio', 'categoria', 'proveedor', 'cuenta', 'user')
         )->orderBy('fecha', 'desc')->orderBy('created_at', 'desc')->get();
         return view('gastos.index', compact('gastos'));
@@ -21,7 +21,7 @@ class GastoController extends Controller
 
     public function create()
     {
-        $negocios    = $this->negociosVisibles();
+        $negocios    = $this->negociosParaCaptura();
         $categorias  = Categoria::whereIn('tipo', ['gasto', 'ambos'])->get();
         $proveedores = Proveedor::orderBy('nombre')->get();
         $cuentas     = Cuenta::with('negocio')->orderBy('nombre')->get();
@@ -50,7 +50,7 @@ class GastoController extends Controller
 
     public function edit(Gasto $gasto)
     {
-        $negocios    = $this->negociosVisibles();
+        $negocios    = $this->negociosParaCaptura();
         $categorias  = Categoria::whereIn('tipo', ['gasto', 'ambos'])->get();
         $proveedores = Proveedor::orderBy('nombre')->get();
         $cuentas     = Cuenta::with('negocio')->orderBy('nombre')->get();

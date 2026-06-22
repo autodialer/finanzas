@@ -13,7 +13,7 @@ class IngresoController extends Controller
 {
     public function index()
     {
-        $ingresos = $this->aplicarFiltroNegocio(
+        $ingresos = $this->aplicarFiltroReportes(
             Ingreso::with('negocio', 'categoria', 'cliente', 'cuenta', 'user')
         )->orderBy('fecha', 'desc')->orderBy('created_at', 'desc')->get();
         return view('ingresos.index', compact('ingresos'));
@@ -21,7 +21,7 @@ class IngresoController extends Controller
 
     public function create()
     {
-        $negocios   = $this->negociosVisibles();
+        $negocios   = $this->negociosParaCaptura();
         $categorias = Categoria::whereIn('tipo', ['ingreso', 'ambos'])->get();
         $clientes   = Cliente::orderBy('nombre')->get();
         $cuentas    = Cuenta::with('negocio')->orderBy('nombre')->get();
@@ -49,7 +49,7 @@ class IngresoController extends Controller
 
     public function edit(Ingreso $ingreso)
     {
-        $negocios   = $this->negociosVisibles();
+        $negocios   = $this->negociosParaCaptura();
         $categorias = Categoria::whereIn('tipo', ['ingreso', 'ambos'])->get();
         $clientes   = Cliente::orderBy('nombre')->get();
         $cuentas    = Cuenta::with('negocio')->orderBy('nombre')->get();
