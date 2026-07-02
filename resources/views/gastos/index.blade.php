@@ -78,9 +78,9 @@
 </form>
 
 <div class="card">
-    <div class="card-body p-0">
+    <div class="card-body p-0" style="overflow-y: auto; max-height: calc(100vh - 260px);">
         <table class="table table-hover mb-0">
-            <thead class="table-dark">
+            <thead class="table-dark" style="position: sticky; top: 0; z-index: 1;">
                 <tr>
                     <th>Fecha</th>
                     <th>Negocio</th>
