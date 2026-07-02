@@ -12,12 +12,37 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class GastoController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $gastos = $this->aplicarFiltroReportes(
+        $query = $this->aplicarFiltroReportes(
             Gasto::with('negocio', 'categoria', 'proveedor', 'cuenta', 'user')
-        )->orderBy('fecha', 'desc')->orderBy('created_at', 'desc')->get();
-        return view('gastos.index', compact('gastos'));
+        );
+
+        if ($request->filled('fecha_desde')) {
+            $query->where('fecha', '>=', $request->fecha_desde);
+        }
+        if ($request->filled('fecha_hasta')) {
+            $query->where('fecha', '<=', $request->fecha_hasta);
+        }
+        if ($request->filled('negocio_id')) {
+            $query->where('negocio_id', $request->negocio_id);
+        }
+        if ($request->filled('proveedor_id')) {
+            $query->where('proveedor_id', $request->proveedor_id);
+        }
+        if ($request->filled('categoria_id')) {
+            $query->where('categoria_id', $request->categoria_id);
+        }
+        if ($request->filled('forma_pago')) {
+            $query->where('forma_pago', $request->forma_pago);
+        }
+
+        $gastos     = $query->orderBy('fecha', 'desc')->orderBy('created_at', 'desc')->get();
+        $negocios   = Negocio::orderBy('nombre')->get();
+        $proveedores = Proveedor::orderBy('nombre')->get();
+        $categorias = Categoria::whereIn('tipo', ['gasto', 'ambos'])->orderBy('nombre')->get();
+
+        return view('gastos.index', compact('gastos', 'negocios', 'proveedores', 'categorias'));
     }
 
     public function create()

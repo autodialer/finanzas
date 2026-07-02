@@ -15,6 +15,68 @@
     </div>
 </div>
 
+{{-- Filtros --}}
+<form method="GET" action="{{ route('gastos.index') }}" class="card mb-3">
+    <div class="card-body py-2">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small mb-1 fw-semibold">Desde</label>
+                <input type="date" name="fecha_desde" class="form-control form-control-sm" value="{{ request('fecha_desde') }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1 fw-semibold">Hasta</label>
+                <input type="date" name="fecha_hasta" class="form-control form-control-sm" value="{{ request('fecha_hasta') }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1 fw-semibold">Negocio</label>
+                <select name="negocio_id" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    @foreach($negocios as $n)
+                        <option value="{{ $n->id }}" {{ request('negocio_id') == $n->id ? 'selected' : '' }}>{{ $n->nombre }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1 fw-semibold">Proveedor</label>
+                <select name="proveedor_id" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    @foreach($proveedores as $p)
+                        <option value="{{ $p->id }}" {{ request('proveedor_id') == $p->id ? 'selected' : '' }}>{{ $p->nombre }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1 fw-semibold">Categoría</label>
+                <select name="categoria_id" class="form-select form-select-sm">
+                    <option value="">Todas</option>
+                    @foreach($categorias as $c)
+                        <option value="{{ $c->id }}" {{ request('categoria_id') == $c->id ? 'selected' : '' }}>{{ $c->nombre }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-md-1">
+                <label class="form-label small mb-1 fw-semibold">Forma pago</label>
+                <select name="forma_pago" class="form-select form-select-sm">
+                    <option value="">Todas</option>
+                    <option value="efectivo" {{ request('forma_pago') == 'efectivo' ? 'selected' : '' }}>Efectivo</option>
+                    <option value="transferencia" {{ request('forma_pago') == 'transferencia' ? 'selected' : '' }}>Transferencia</option>
+                    <option value="tarjeta" {{ request('forma_pago') == 'tarjeta' ? 'selected' : '' }}>Tarjeta</option>
+                </select>
+            </div>
+            <div class="col-md-1 d-flex gap-1">
+                <button type="submit" class="btn btn-danger btn-sm w-100">
+                    <i class="bi bi-funnel"></i> Filtrar
+                </button>
+            </div>
+        </div>
+        @if(request()->hasAny(['fecha_desde','fecha_hasta','negocio_id','proveedor_id','categoria_id','forma_pago']))
+        <div class="mt-2">
+            <a href="{{ route('gastos.index') }}" class="text-muted small"><i class="bi bi-x-circle"></i> Limpiar filtros</a>
+        </div>
+        @endif
+    </div>
+</form>
+
 <div class="card">
     <div class="card-body p-0">
         <table class="table table-hover mb-0">
