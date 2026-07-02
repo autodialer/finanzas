@@ -50,6 +50,8 @@ Route::middleware('auth')->group(function () {
     Route::post('clientes-importar', [ClienteController::class, 'import'])->name('clientes.import');
     Route::resource('ingresos', IngresoController::class);
     Route::resource('gastos', GastoController::class);
+    Route::get('gastos-importar', [GastoController::class, 'importForm'])->name('gastos.import.form');
+    Route::post('gastos-importar', [GastoController::class, 'import'])->name('gastos.import');
     Route::resource('traspasos', TraspasoController::class)->only(['index', 'create', 'store', 'destroy']);
     Route::get('perfil/password', [PerfilController::class, 'editPassword'])->name('perfil.password.edit');
     Route::put('perfil/password', [PerfilController::class, 'updatePassword'])->name('perfil.password.update');

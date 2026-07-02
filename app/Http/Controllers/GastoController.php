@@ -8,6 +8,7 @@ use App\Models\Categoria;
 use App\Models\Proveedor;
 use App\Models\Cuenta;
 use Illuminate\Http\Request;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class GastoController extends Controller
 {
@@ -113,5 +114,90 @@ class GastoController extends Controller
     {
         $gasto->delete();
         return redirect()->route('gastos.index')->with('exito', 'Gasto eliminado correctamente.');
+    }
+
+    public function importForm()
+    {
+        $negocios   = $this->negociosParaCaptura();
+        $categorias = Categoria::whereIn('tipo', ['gasto', 'ambos'])->orderBy('nombre')->get();
+        $cuentas    = Cuenta::with('negocio')->orderBy('nombre')->get();
+        return view('gastos.import', compact('negocios', 'categorias', 'cuentas'));
+    }
+
+    public function import(Request $request)
+    {
+        $request->validate([
+            'negocio_id'   => 'required|exists:negocios,id',
+            'categoria_id' => 'required|exists:categorias,id',
+            'cuenta_id'    => 'required|exists:cuentas,id',
+            'archivo'      => 'required|file|mimes:xlsx,xls',
+        ]);
+
+        $spreadsheet = IOFactory::load($request->file('archivo')->getPathname());
+        $hoja = $spreadsheet->getActiveSheet();
+        $filas = $hoja->toArray(null, true, true, false);
+
+        // Buscar la fila de encabezados (tiene "Fecha" en la primera columna)
+        $headerRow = null;
+        foreach ($filas as $i => $fila) {
+            if (isset($fila[0]) && strtolower(trim((string)$fila[0])) === 'fecha') {
+                $headerRow = $i;
+                break;
+            }
+        }
+
+        if ($headerRow === null) {
+            return back()->withErrors(['archivo' => 'No se encontró la fila de encabezados en el archivo.']);
+        }
+
+        $importados = 0;
+        $omitidos   = 0;
+
+        for ($i = $headerRow + 1; $i < count($filas); $i++) {
+            $fila = $filas[$i];
+
+            // Columnas Amex: 0=Fecha, 1=FechaCompra, 2=Descripción, 3=Titular, 4=Importe
+            $fecha    = trim((string)($fila[0] ?? ''));
+            $concepto = trim((string)($fila[2] ?? ''));
+            $monto    = $fila[4] ?? null;
+
+            if (empty($fecha) || empty($concepto) || $monto === null || $monto === '') {
+                $omitidos++;
+                continue;
+            }
+
+            // Parsear fecha (viene como "22 Jun 2026" o como número de serie Excel)
+            try {
+                if (is_numeric($fecha)) {
+                    $fechaObj = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject((float)$fecha);
+                } else {
+                    $fechaObj = new \DateTime($fecha);
+                }
+                $fechaStr = $fechaObj->format('Y-m-d');
+            } catch (\Exception $e) {
+                $omitidos++;
+                continue;
+            }
+
+            Gasto::create([
+                'negocio_id'        => $request->negocio_id,
+                'categoria_id'      => $request->categoria_id,
+                'cuenta_id'         => $request->cuenta_id,
+                'user_id'           => auth()->id(),
+                'monto'             => (float) $monto,
+                'fecha'             => $fechaStr,
+                'concepto'          => $concepto,
+                'forma_pago'        => 'tarjeta',
+                'tiene_iva'         => false,
+                'monto_iva'         => 0,
+                'tiene_propina'     => false,
+                'monto_propina'     => 0,
+                'porcentaje_propina'=> 0,
+            ]);
+            $importados++;
+        }
+
+        return redirect()->route('gastos.index')
+            ->with('exito', "Importación completada: {$importados} gastos importados, {$omitidos} omitidos.");
     }
 }
