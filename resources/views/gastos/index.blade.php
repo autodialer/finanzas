@@ -128,6 +128,9 @@
                         </a>
                         <form action="{{ route('gastos.destroy', $gasto) }}" method="POST" class="d-inline">
                             @csrf @method('DELETE')
+                            @foreach(request()->only(['fecha_desde','fecha_hasta','negocio_id','proveedor_id','categoria_id','forma_pago']) as $key => $val)
+                                <input type="hidden" name="{{ $key }}" value="{{ $val }}">
+                            @endforeach
                             <button onclick="return confirm('¿Eliminar?')" class="btn btn-sm btn-danger">
                                 <i class="bi bi-trash"></i>
                             </button>

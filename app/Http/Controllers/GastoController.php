@@ -135,10 +135,11 @@ class GastoController extends Controller
         return $result;
     }
 
-    public function destroy(Gasto $gasto)
+    public function destroy(Request $request, Gasto $gasto)
     {
         $gasto->delete();
-        return redirect()->route('gastos.index')->with('exito', 'Gasto eliminado correctamente.');
+        $filtros = $request->only(['fecha_desde', 'fecha_hasta', 'negocio_id', 'proveedor_id', 'categoria_id', 'forma_pago']);
+        return redirect()->route('gastos.index', array_filter($filtros))->with('exito', 'Gasto eliminado correctamente.');
     }
 
     public function importForm()
