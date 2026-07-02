@@ -14,35 +14,33 @@ class GastoController extends Controller
 {
     public function index(Request $request)
     {
+        $claves = ['fecha_desde', 'fecha_hasta', 'negocio_id', 'proveedor_id', 'categoria_id', 'forma_pago'];
+
+        if ($request->has('fecha_desde') || $request->has('limpiar')) {
+            // El usuario envió el formulario de filtros o pidió limpiar
+            $filtros = $request->boolean('limpiar') ? [] : $request->only($claves);
+            session(['gastos_filtros' => array_filter($filtros, fn($v) => $v !== null && $v !== '')]);
+        }
+
+        $filtros = session('gastos_filtros', []);
+
         $query = $this->aplicarFiltroReportes(
             Gasto::with('negocio', 'categoria', 'proveedor', 'cuenta', 'user')
         );
 
-        if ($request->filled('fecha_desde')) {
-            $query->where('fecha', '>=', $request->fecha_desde);
-        }
-        if ($request->filled('fecha_hasta')) {
-            $query->where('fecha', '<=', $request->fecha_hasta);
-        }
-        if ($request->filled('negocio_id')) {
-            $query->where('negocio_id', $request->negocio_id);
-        }
-        if ($request->filled('proveedor_id')) {
-            $query->where('proveedor_id', $request->proveedor_id);
-        }
-        if ($request->filled('categoria_id')) {
-            $query->where('categoria_id', $request->categoria_id);
-        }
-        if ($request->filled('forma_pago')) {
-            $query->where('forma_pago', $request->forma_pago);
-        }
+        if (!empty($filtros['fecha_desde']))   $query->where('fecha', '>=', $filtros['fecha_desde']);
+        if (!empty($filtros['fecha_hasta']))   $query->where('fecha', '<=', $filtros['fecha_hasta']);
+        if (!empty($filtros['negocio_id']))    $query->where('negocio_id', $filtros['negocio_id']);
+        if (!empty($filtros['proveedor_id']))  $query->where('proveedor_id', $filtros['proveedor_id']);
+        if (!empty($filtros['categoria_id']))  $query->where('categoria_id', $filtros['categoria_id']);
+        if (!empty($filtros['forma_pago']))    $query->where('forma_pago', $filtros['forma_pago']);
 
-        $gastos     = $query->orderBy('fecha', 'desc')->orderBy('created_at', 'desc')->get();
-        $negocios   = Negocio::orderBy('nombre')->get();
+        $gastos      = $query->orderBy('fecha', 'desc')->orderBy('created_at', 'desc')->get();
+        $negocios    = Negocio::orderBy('nombre')->get();
         $proveedores = Proveedor::orderBy('nombre')->get();
-        $categorias = Categoria::whereIn('tipo', ['gasto', 'ambos'])->orderBy('nombre')->get();
+        $categorias  = Categoria::whereIn('tipo', ['gasto', 'ambos'])->orderBy('nombre')->get();
 
-        return view('gastos.index', compact('gastos', 'negocios', 'proveedores', 'categorias'));
+        return view('gastos.index', compact('gastos', 'negocios', 'proveedores', 'categorias', 'filtros'));
     }
 
     public function create()
@@ -135,11 +133,10 @@ class GastoController extends Controller
         return $result;
     }
 
-    public function destroy(Request $request, Gasto $gasto)
+    public function destroy(Gasto $gasto)
     {
         $gasto->delete();
-        $filtros = $request->only(['fecha_desde', 'fecha_hasta', 'negocio_id', 'proveedor_id', 'categoria_id', 'forma_pago']);
-        return redirect()->route('gastos.index', array_filter($filtros))->with('exito', 'Gasto eliminado correctamente.');
+        return redirect()->route('gastos.index')->with('exito', 'Gasto eliminado correctamente.');
     }
 
     public function importForm()

@@ -21,18 +21,18 @@
         <div class="row g-2 align-items-end">
             <div class="col-md-2">
                 <label class="form-label small mb-1 fw-semibold">Desde</label>
-                <input type="date" name="fecha_desde" class="form-control form-control-sm" value="{{ request('fecha_desde') }}">
+                <input type="date" name="fecha_desde" class="form-control form-control-sm" value="{{ $filtros['fecha_desde'] ?? '' }}">
             </div>
             <div class="col-md-2">
                 <label class="form-label small mb-1 fw-semibold">Hasta</label>
-                <input type="date" name="fecha_hasta" class="form-control form-control-sm" value="{{ request('fecha_hasta') }}">
+                <input type="date" name="fecha_hasta" class="form-control form-control-sm" value="{{ $filtros['fecha_hasta'] ?? '' }}">
             </div>
             <div class="col-md-2">
                 <label class="form-label small mb-1 fw-semibold">Negocio</label>
                 <select name="negocio_id" class="form-select form-select-sm">
                     <option value="">Todos</option>
                     @foreach($negocios as $n)
-                        <option value="{{ $n->id }}" {{ request('negocio_id') == $n->id ? 'selected' : '' }}>{{ $n->nombre }}</option>
+                        <option value="{{ $n->id }}" {{ ($filtros['negocio_id'] ?? '') == $n->id ? 'selected' : '' }}>{{ $n->nombre }}</option>
                     @endforeach
                 </select>
             </div>
@@ -41,7 +41,7 @@
                 <select name="proveedor_id" class="form-select form-select-sm">
                     <option value="">Todos</option>
                     @foreach($proveedores as $p)
-                        <option value="{{ $p->id }}" {{ request('proveedor_id') == $p->id ? 'selected' : '' }}>{{ $p->nombre }}</option>
+                        <option value="{{ $p->id }}" {{ ($filtros['proveedor_id'] ?? '') == $p->id ? 'selected' : '' }}>{{ $p->nombre }}</option>
                     @endforeach
                 </select>
             </div>
@@ -50,7 +50,7 @@
                 <select name="categoria_id" class="form-select form-select-sm">
                     <option value="">Todas</option>
                     @foreach($categorias as $c)
-                        <option value="{{ $c->id }}" {{ request('categoria_id') == $c->id ? 'selected' : '' }}>{{ $c->nombre }}</option>
+                        <option value="{{ $c->id }}" {{ ($filtros['categoria_id'] ?? '') == $c->id ? 'selected' : '' }}>{{ $c->nombre }}</option>
                     @endforeach
                 </select>
             </div>
@@ -58,9 +58,9 @@
                 <label class="form-label small mb-1 fw-semibold">Forma pago</label>
                 <select name="forma_pago" class="form-select form-select-sm">
                     <option value="">Todas</option>
-                    <option value="efectivo" {{ request('forma_pago') == 'efectivo' ? 'selected' : '' }}>Efectivo</option>
-                    <option value="transferencia" {{ request('forma_pago') == 'transferencia' ? 'selected' : '' }}>Transferencia</option>
-                    <option value="tarjeta" {{ request('forma_pago') == 'tarjeta' ? 'selected' : '' }}>Tarjeta</option>
+                    <option value="efectivo" {{ ($filtros['forma_pago'] ?? '') == 'efectivo' ? 'selected' : '' }}>Efectivo</option>
+                    <option value="transferencia" {{ ($filtros['forma_pago'] ?? '') == 'transferencia' ? 'selected' : '' }}>Transferencia</option>
+                    <option value="tarjeta" {{ ($filtros['forma_pago'] ?? '') == 'tarjeta' ? 'selected' : '' }}>Tarjeta</option>
                 </select>
             </div>
             <div class="col-md-1 d-flex gap-1">
@@ -69,9 +69,9 @@
                 </button>
             </div>
         </div>
-        @if(request()->hasAny(['fecha_desde','fecha_hasta','negocio_id','proveedor_id','categoria_id','forma_pago']))
+        @if(!empty($filtros))
         <div class="mt-2">
-            <a href="{{ route('gastos.index') }}" class="text-muted small"><i class="bi bi-x-circle"></i> Limpiar filtros</a>
+            <a href="{{ route('gastos.index', ['limpiar' => 1]) }}" class="text-muted small"><i class="bi bi-x-circle"></i> Limpiar filtros</a>
         </div>
         @endif
     </div>
@@ -128,9 +128,6 @@
                         </a>
                         <form action="{{ route('gastos.destroy', $gasto) }}" method="POST" class="d-inline">
                             @csrf @method('DELETE')
-                            @foreach(request()->only(['fecha_desde','fecha_hasta','negocio_id','proveedor_id','categoria_id','forma_pago']) as $key => $val)
-                                <input type="hidden" name="{{ $key }}" value="{{ $val }}">
-                            @endforeach
                             <button onclick="return confirm('¿Eliminar?')" class="btn btn-sm btn-danger">
                                 <i class="bi bi-trash"></i>
                             </button>
