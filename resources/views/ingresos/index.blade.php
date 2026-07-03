@@ -2,16 +2,25 @@
 
 @section('titulo', 'Ingresos')
 
+@section('styles')
+<style>
+    html, body { height: 100%; overflow: hidden; }
+    .main-content { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+    .tabla-scroll { flex: 1; overflow-y: auto; min-height: 0; }
+    .tabla-scroll thead th { position: sticky; top: 0; z-index: 1; }
+</style>
+@endsection
+
 @section('contenido')
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3 flex-shrink-0">
     <h4>Ingresos</h4>
     <a href="{{ route('ingresos.create') }}" class="btn btn-success btn-sm">
         <i class="bi bi-plus-lg"></i> Nuevo Ingreso
     </a>
 </div>
 
-<div class="card">
-    <div class="card-body p-0">
+<div class="card flex-grow-1 d-flex flex-column min-height-0" style="overflow: hidden;">
+    <div class="card-body p-0 tabla-scroll">
         <table class="table table-hover mb-0">
             <thead class="table-dark">
                 <tr>
