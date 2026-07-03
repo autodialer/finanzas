@@ -19,7 +19,8 @@
 @endsection
 
 @section('contenido')
-<div class="header-fijo d-flex justify-content-between align-items-center mb-3">
+<div class="header-fijo">
+<div class="d-flex justify-content-between align-items-center mb-3">
     <h4>Ingresos</h4>
     <a href="{{ route('ingresos.create') }}" class="btn btn-success btn-sm">
         <i class="bi bi-plus-lg"></i> Nuevo Ingreso
@@ -87,6 +88,7 @@
         @endif
     </div>
 </form>
+</div>{{-- fin header-fijo --}}
 
 <div class="card">
     <div class="card-body p-0 tabla-scroll">
