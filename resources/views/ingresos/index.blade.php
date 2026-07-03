@@ -13,8 +13,7 @@
     }
     .tabla-scroll thead th {
         position: sticky;
-        top: 0;
-        z-index: 1;
+        z-index: 50;
     }
 </style>
 @endsection
@@ -104,4 +103,15 @@
         </table>
     </div>
 </div>
+@endsection
+
+@section('scripts')
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var header = document.querySelector('.header-fijo');
+        var ths = document.querySelectorAll('.tabla-scroll thead th');
+        var top = header.offsetHeight + 'px';
+        ths.forEach(function(th) { th.style.top = top; });
+    });
+</script>
 @endsection
