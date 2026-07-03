@@ -26,6 +26,68 @@
     </a>
 </div>
 
+{{-- Filtros --}}
+<form method="GET" action="{{ route('ingresos.index') }}" class="card mb-3">
+    <div class="card-body py-2">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small mb-1 fw-semibold">Desde</label>
+                <input type="date" name="fecha_desde" class="form-control form-control-sm" value="{{ $filtros['fecha_desde'] ?? '' }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1 fw-semibold">Hasta</label>
+                <input type="date" name="fecha_hasta" class="form-control form-control-sm" value="{{ $filtros['fecha_hasta'] ?? '' }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1 fw-semibold">Negocio</label>
+                <select name="negocio_id" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    @foreach($negocios as $n)
+                        <option value="{{ $n->id }}" {{ ($filtros['negocio_id'] ?? '') == $n->id ? 'selected' : '' }}>{{ $n->nombre }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1 fw-semibold">Cliente</label>
+                <select name="cliente_id" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    @foreach($clientes as $c)
+                        <option value="{{ $c->id }}" {{ ($filtros['cliente_id'] ?? '') == $c->id ? 'selected' : '' }}>{{ $c->nombre }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1 fw-semibold">Categoría</label>
+                <select name="categoria_id" class="form-select form-select-sm">
+                    <option value="">Todas</option>
+                    @foreach($categorias as $cat)
+                        <option value="{{ $cat->id }}" {{ ($filtros['categoria_id'] ?? '') == $cat->id ? 'selected' : '' }}>{{ $cat->nombre }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-md-1">
+                <label class="form-label small mb-1 fw-semibold">Forma pago</label>
+                <select name="forma_pago" class="form-select form-select-sm">
+                    <option value="">Todas</option>
+                    <option value="efectivo" {{ ($filtros['forma_pago'] ?? '') == 'efectivo' ? 'selected' : '' }}>Efectivo</option>
+                    <option value="transferencia" {{ ($filtros['forma_pago'] ?? '') == 'transferencia' ? 'selected' : '' }}>Transferencia</option>
+                    <option value="tarjeta" {{ ($filtros['forma_pago'] ?? '') == 'tarjeta' ? 'selected' : '' }}>Tarjeta</option>
+                </select>
+            </div>
+            <div class="col-md-1">
+                <button type="submit" class="btn btn-success btn-sm w-100">
+                    <i class="bi bi-funnel"></i> Filtrar
+                </button>
+            </div>
+        </div>
+        @if(!empty($filtros))
+        <div class="mt-2">
+            <a href="{{ route('ingresos.index', ['limpiar' => 1]) }}" class="text-muted small"><i class="bi bi-x-circle"></i> Limpiar filtros</a>
+        </div>
+        @endif
+    </div>
+</form>
+
 <div class="card">
     <div class="card-body p-0 tabla-scroll">
         <table class="table table-hover mb-0">
