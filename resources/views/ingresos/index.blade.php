@@ -4,11 +4,12 @@
 
 @section('styles')
 <style>
-    body { overflow: hidden; }
-    .main-content { height: 100vh; overflow: hidden; }
-    .tabla-scroll {
-        height: calc(100vh - 130px);
-        overflow-y: auto;
+    .header-fijo {
+        position: sticky;
+        top: 0;
+        background-color: #f8fafc;
+        z-index: 100;
+        padding-bottom: 0.75rem;
     }
     .tabla-scroll thead th {
         position: sticky;
@@ -19,7 +20,7 @@
 @endsection
 
 @section('contenido')
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="header-fijo d-flex justify-content-between align-items-center mb-3">
     <h4>Ingresos</h4>
     <a href="{{ route('ingresos.create') }}" class="btn btn-success btn-sm">
         <i class="bi bi-plus-lg"></i> Nuevo Ingreso
