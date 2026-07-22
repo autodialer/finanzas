@@ -35,6 +35,7 @@ Route::post('/reset-password', [ResetPasswordController::class, 'reset'])->name(
 Route::middleware('auth')->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/reportes', [ReporteController::class, 'index'])->name('reportes.index');
+    Route::get('/reportes/mensual', [ReporteController::class, 'mensual'])->name('reportes.mensual');
     Route::get('/reportes/cuentas', [ReporteController::class, 'cuentas'])->name('reportes.cuentas');
     Route::resource('negocios', NegocioController::class);
     Route::resource('categorias', CategoriaController::class);

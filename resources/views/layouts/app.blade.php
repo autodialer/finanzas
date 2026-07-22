@@ -73,6 +73,9 @@
                     <a href="{{ route('reportes.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('reportes.index') ? 'active' : '' }}">
                         <i class="bi bi-bar-chart me-2"></i>Reportes
                     </a>
+                    <a href="{{ route('reportes.mensual') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('reportes.mensual') ? 'active' : '' }}">
+                        <i class="bi bi-calendar3 me-2"></i>Reporte Mensual
+                    </a>
                     <a href="{{ route('reportes.cuentas') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('reportes.cuentas') ? 'active' : '' }}">
                         <i class="bi bi-credit-card me-2"></i>Rep. Cuentas
                     </a>

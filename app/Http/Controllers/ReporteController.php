@@ -60,6 +60,58 @@ class ReporteController extends Controller
         ));
     }
 
+    public function mensual(Request $request)
+    {
+        $mes  = (int) $request->input('mes', now()->month);
+        $anio = (int) $request->input('anio', now()->year);
+
+        $inicioMes = \Carbon\Carbon::create($anio, $mes, 1)->startOfMonth();
+        $finMes    = $inicioMes->copy()->endOfMonth();
+
+        $negocios = $this->negociosVisibles()->sortBy('nombre');
+        $negocioIds = $negocios->pluck('id');
+
+        $ingresosPorNegocio = $this->aplicarFiltroReportes(Ingreso::query())
+            ->whereIn('negocio_id', $negocioIds)
+            ->whereBetween('fecha', [$inicioMes->toDateString(), $finMes->toDateString()])
+            ->selectRaw('negocio_id, SUM(monto) as total')
+            ->groupBy('negocio_id')
+            ->pluck('total', 'negocio_id');
+
+        $gastosPorNegocio = $this->aplicarFiltroReportes(Gasto::query())
+            ->whereIn('negocio_id', $negocioIds)
+            ->whereBetween('fecha', [$inicioMes->toDateString(), $finMes->toDateString()])
+            ->selectRaw('negocio_id, SUM(monto) as total')
+            ->groupBy('negocio_id')
+            ->pluck('total', 'negocio_id');
+
+        $reporte = $negocios->map(function ($negocio) use ($ingresosPorNegocio, $gastosPorNegocio) {
+            $ingresos = (float) ($ingresosPorNegocio[$negocio->id] ?? 0);
+            $gastos   = (float) ($gastosPorNegocio[$negocio->id] ?? 0);
+            return [
+                'negocio'  => $negocio,
+                'ingresos' => $ingresos,
+                'gastos'   => $gastos,
+                'balance'  => $ingresos - $gastos,
+            ];
+        });
+
+        $totalIngresos = $reporte->sum('ingresos');
+        $totalGastos   = $reporte->sum('gastos');
+        $balanceGeneral = $totalIngresos - $totalGastos;
+
+        return view('reportes.mensual', compact(
+            'reporte',
+            'totalIngresos',
+            'totalGastos',
+            'balanceGeneral',
+            'mes',
+            'anio',
+            'inicioMes',
+            'finMes'
+        ));
+    }
+
     public function cuentas(Request $request)
     {
         $negocios = $this->negociosVisibles()->sortBy('nombre');
