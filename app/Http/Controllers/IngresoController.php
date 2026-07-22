@@ -11,12 +11,34 @@ use Illuminate\Http\Request;
 
 class IngresoController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $ingresos = $this->aplicarFiltroReportes(
+        $claves = ['fecha_desde', 'fecha_hasta', 'negocio_id', 'cliente_id', 'categoria_id', 'forma_pago'];
+
+        if ($request->has('fecha_desde') || $request->has('limpiar')) {
+            $filtros = $request->boolean('limpiar') ? [] : $request->only($claves);
+            session(['ingresos_filtros' => array_filter($filtros, fn($v) => $v !== null && $v !== '')]);
+        }
+
+        $filtros = session('ingresos_filtros', []);
+
+        $query = $this->aplicarFiltroReportes(
             Ingreso::with('negocio', 'categoria', 'cliente', 'cuenta', 'user')
-        )->orderBy('fecha', 'desc')->orderBy('created_at', 'desc')->get();
-        return view('ingresos.index', compact('ingresos'));
+        );
+
+        if (!empty($filtros['fecha_desde']))  $query->where('fecha', '>=', $filtros['fecha_desde']);
+        if (!empty($filtros['fecha_hasta']))  $query->where('fecha', '<=', $filtros['fecha_hasta']);
+        if (!empty($filtros['negocio_id']))   $query->where('negocio_id', $filtros['negocio_id']);
+        if (!empty($filtros['cliente_id']))   $query->where('cliente_id', $filtros['cliente_id']);
+        if (!empty($filtros['categoria_id'])) $query->where('categoria_id', $filtros['categoria_id']);
+        if (!empty($filtros['forma_pago']))   $query->where('forma_pago', $filtros['forma_pago']);
+
+        $ingresos   = $query->orderBy('fecha', 'desc')->orderBy('created_at', 'desc')->get();
+        $negocios   = Negocio::orderBy('nombre')->get();
+        $clientes   = Cliente::orderBy('nombre')->get();
+        $categorias = Categoria::whereIn('tipo', ['ingreso', 'ambos'])->orderBy('nombre')->get();
+
+        return view('ingresos.index', compact('ingresos', 'negocios', 'clientes', 'categorias', 'filtros'));
     }
 
     public function create()
