@@ -17,9 +17,9 @@
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <form method="GET" action="{{ route('reportes.cuentas') }}" class="row g-3 align-items-end">
-            <div class="col-md-3">
+            <div class="col-lg-3 col-md-6">
                 <label class="form-label fw-semibold small">Negocio</label>
-                <select name="negocio_id" class="form-select form-select-sm">
+                <select name="negocio_id" id="filtroNegocio" class="form-select form-select-sm">
                     <option value="">Todos los negocios</option>
                     @foreach($negocios as $neg)
                         <option value="{{ $neg->id }}" {{ $negocioId == $neg->id ? 'selected' : '' }}>
@@ -28,15 +28,32 @@
                     @endforeach
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-lg-3 col-md-6">
+                <label class="form-label fw-semibold small">Cuenta</label>
+                <select name="cuenta_id" id="filtroCuenta" class="form-select form-select-sm">
+                    <option value="">Todas las cuentas</option>
+                    @foreach($cuentasDisponibles->groupBy(fn($c) => $c->negocio->nombre ?? 'Sin negocio') as $nombreNegocio => $ctas)
+                        <optgroup label="{{ $nombreNegocio }}">
+                            @foreach($ctas as $cta)
+                                <option value="{{ $cta->id }}"
+                                        data-negocio="{{ $cta->negocio_id }}"
+                                        {{ $cuentaId == $cta->id ? 'selected' : '' }}>
+                                    {{ $cta->nombre }}@if($cta->numero) · Nº {{ $cta->numero }}@endif
+                                </option>
+                            @endforeach
+                        </optgroup>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-lg-2 col-md-6">
                 <label class="form-label fw-semibold small">Fecha inicio</label>
                 <input type="date" name="fecha_inicio" class="form-control form-control-sm" value="{{ $fechaInicio }}">
             </div>
-            <div class="col-md-3">
+            <div class="col-lg-2 col-md-6">
                 <label class="form-label fw-semibold small">Fecha fin</label>
                 <input type="date" name="fecha_fin" class="form-control form-control-sm" value="{{ $fechaFin }}">
             </div>
-            <div class="col-md-3 d-flex gap-2">
+            <div class="col-lg-2 col-md-12 d-flex gap-2">
                 <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
                     <i class="bi bi-search me-1"></i>Filtrar
                 </button>
@@ -193,4 +210,37 @@
 @endforeach
 
 @endif
+@endsection
+
+@section('scripts')
+<script>
+    // Al elegir un negocio, deja en el selector de cuentas solo las de ese negocio.
+    document.addEventListener('DOMContentLoaded', function () {
+        const selNegocio = document.getElementById('filtroNegocio');
+        const selCuenta  = document.getElementById('filtroCuenta');
+        if (!selNegocio || !selCuenta) return;
+
+        function filtrarCuentas() {
+            const negocio = selNegocio.value;
+            let ocultaSeleccionada = false;
+
+            selCuenta.querySelectorAll('optgroup').forEach(function (grupo) {
+                let visibles = 0;
+                grupo.querySelectorAll('option').forEach(function (opt) {
+                    const coincide = !negocio || opt.dataset.negocio === negocio;
+                    opt.hidden = !coincide;
+                    opt.disabled = !coincide;
+                    if (coincide) visibles++;
+                    if (!coincide && opt.selected) ocultaSeleccionada = true;
+                });
+                grupo.hidden = visibles === 0;
+            });
+
+            if (ocultaSeleccionada) selCuenta.value = '';
+        }
+
+        selNegocio.addEventListener('change', filtrarCuentas);
+        filtrarCuentas();
+    });
+</script>
 @endsection
