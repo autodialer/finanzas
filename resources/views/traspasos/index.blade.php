@@ -100,12 +100,42 @@
                 @endforelse
             </tbody>
             @if($traspasos->count() > 0)
+            @php
+                $cuentaSel = $filtros['cuenta_id'] ?? null;
+                $entradas  = $cuentaSel ? $traspasos->where('cuenta_destino_id', $cuentaSel)->sum('monto') : 0;
+                $salidas   = $cuentaSel ? $traspasos->where('cuenta_origen_id', $cuentaSel)->sum('monto') : 0;
+                $neto      = $entradas - $salidas;
+            @endphp
             <tfoot class="table-light">
+                @if($cuentaSel)
+                <tr>
+                    <td colspan="5" class="text-end fw-semibold">
+                        <i class="bi bi-arrow-down-circle me-1 text-success"></i>Entradas a la cuenta:
+                    </td>
+                    <td class="text-end fw-bold text-success">${{ number_format($entradas, 2) }}</td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td colspan="5" class="text-end fw-semibold">
+                        <i class="bi bi-arrow-up-circle me-1 text-danger"></i>Salidas de la cuenta:
+                    </td>
+                    <td class="text-end fw-bold text-danger">${{ number_format($salidas, 2) }}</td>
+                    <td></td>
+                </tr>
+                <tr class="border-top">
+                    <td colspan="5" class="text-end fw-bold">Neto (entradas − salidas):</td>
+                    <td class="text-end fw-bold {{ $neto >= 0 ? 'text-success' : 'text-danger' }}">
+                        ${{ number_format($neto, 2) }}
+                    </td>
+                    <td></td>
+                </tr>
+                @else
                 <tr>
                     <td colspan="5" class="text-end fw-bold">Total traspasos:</td>
                     <td class="text-end fw-bold text-primary">${{ number_format($traspasos->sum('monto'), 2) }}</td>
                     <td></td>
                 </tr>
+                @endif
             </tfoot>
             @endif
         </table>
