@@ -10,6 +10,47 @@
     </a>
 </div>
 
+{{-- Filtros --}}
+<form method="GET" action="{{ route('traspasos.index') }}" class="card mb-3">
+    <div class="card-body py-2">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small mb-1 fw-semibold">Desde</label>
+                <input type="date" name="fecha_desde" class="form-control form-control-sm" value="{{ $filtros['fecha_desde'] ?? '' }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1 fw-semibold">Hasta</label>
+                <input type="date" name="fecha_hasta" class="form-control form-control-sm" value="{{ $filtros['fecha_hasta'] ?? '' }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small mb-1 fw-semibold">Cuenta (origen o destino)</label>
+                <select name="cuenta_id" class="form-select form-select-sm">
+                    <option value="">Todas las cuentas</option>
+                    @foreach($cuentas->groupBy(fn($c) => $c->negocio->nombre ?? 'Sin negocio') as $nombreNegocio => $ctas)
+                        <optgroup label="{{ $nombreNegocio }}">
+                            @foreach($ctas as $cta)
+                                <option value="{{ $cta->id }}" {{ ($filtros['cuenta_id'] ?? '') == $cta->id ? 'selected' : '' }}>
+                                    {{ $cta->nombre }}@if($cta->numero) · Nº {{ $cta->numero }}@endif
+                                </option>
+                            @endforeach
+                        </optgroup>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-md-2 d-flex gap-1">
+                <button type="submit" class="btn btn-primary btn-sm w-100">
+                    <i class="bi bi-funnel"></i> Filtrar
+                </button>
+            </div>
+        </div>
+        @if(!empty($filtros))
+        <div class="mt-2">
+            <a href="{{ route('traspasos.index', ['limpiar' => 1]) }}" class="text-muted small"><i class="bi bi-x-circle"></i> Limpiar filtros</a>
+        </div>
+        @endif
+    </div>
+</form>
+
 <div class="card">
     <div class="card-body p-0">
         <table class="table table-hover mb-0">
@@ -52,7 +93,9 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="7" class="text-center text-muted py-4">Sin traspasos registrados</td>
+                    <td colspan="7" class="text-center text-muted py-4">
+                        {{ !empty($filtros) ? 'Sin traspasos que coincidan con los filtros' : 'Sin traspasos registrados' }}
+                    </td>
                 </tr>
                 @endforelse
             </tbody>
