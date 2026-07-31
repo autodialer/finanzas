@@ -22,7 +22,9 @@ class TraspasoController extends Controller
 
         $ids = $this->negociosPermitidos();
 
-        $query = Traspaso::with('cuentaOrigen.negocio', 'cuentaDestino.negocio')->latest();
+        $query = Traspaso::with('cuentaOrigen.negocio', 'cuentaDestino.negocio')
+            ->orderBy('fecha', 'desc')
+            ->orderBy('created_at', 'desc');
 
         $cuentasQuery = Cuenta::with('negocio');
 
