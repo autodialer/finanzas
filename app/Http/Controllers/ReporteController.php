@@ -119,11 +119,24 @@ class ReporteController extends Controller
         $fechaInicio = $request->input('fecha_inicio', now()->startOfMonth()->toDateString());
         $fechaFin    = $request->input('fecha_fin',    now()->toDateString());
         $negocioId   = $request->input('negocio_id');
+        $cuentaId    = $request->input('cuenta_id');
+
+        // Catálogo de cuentas para el selector (todas las visibles, sin filtrar por cuenta)
+        $cuentasDisponibles = $this->aplicarFiltroNegocio(Cuenta::with('negocio', 'banco'))
+            ->orderBy('negocio_id')->orderBy('nombre')->get();
+
+        // Si la cuenta elegida no es visible para el usuario, se ignora el filtro
+        if ($cuentaId && !$cuentasDisponibles->contains('id', (int) $cuentaId)) {
+            $cuentaId = null;
+        }
 
         // Cuentas con su negocio y banco — solo de negocios visibles
         $cuentasQuery = $this->aplicarFiltroNegocio(Cuenta::with('negocio', 'banco'))->orderBy('negocio_id');
         if ($negocioId) {
             $cuentasQuery->where('negocio_id', $negocioId);
+        }
+        if ($cuentaId) {
+            $cuentasQuery->where('id', $cuentaId);
         }
         $cuentas = $cuentasQuery->get();
         $cuentaIds = $cuentas->pluck('id');
@@ -212,10 +225,12 @@ class ReporteController extends Controller
 
         return view('reportes.cuentas', compact(
             'negocios',
+            'cuentasDisponibles',
             'reporte',
             'fechaInicio',
             'fechaFin',
-            'negocioId'
+            'negocioId',
+            'cuentaId'
         ));
     }
 }

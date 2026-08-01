@@ -162,6 +162,8 @@
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('gastos.index') }}">Gastos</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('traspasos.index') }}">Traspasos</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('reportes.index') }}">Reportes</a></li>
+                                <li class="nav-item"><a class="nav-link text-white" href="{{ route('reportes.mensual') }}">Reporte Mensual</a></li>
+                                <li class="nav-item"><a class="nav-link text-white" href="{{ route('reportes.cuentas') }}">Rep. Cuentas</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('nominas.index') }}">Nóminas</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('empleados.index') }}">Empleados</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('negocios.index') }}">Negocios</a></li>
@@ -171,6 +173,17 @@
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('proveedores.index') }}">Proveedores</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('bancos.index') }}">Bancos</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('cuentas.index') }}">Cuentas</a></li>
+                                @if(auth()->user()->isAdmin())
+                                <li class="nav-item"><a class="nav-link text-white" href="{{ route('usuarios.index') }}">Usuarios</a></li>
+                                @endif
+                                <li><hr class="dropdown-divider border-secondary"></li>
+                                <li class="nav-item"><a class="nav-link text-white" href="{{ route('perfil.password.edit') }}">Cambiar contraseña</a></li>
+                                <li class="nav-item">
+                                    <form method="POST" action="{{ route('logout') }}" class="px-3 py-1">
+                                        @csrf
+                                        <button type="submit" class="btn btn-sm btn-outline-light w-100">Cerrar sesión</button>
+                                    </form>
+                                </li>
                             </ul>
                         </div>
                     </div>
