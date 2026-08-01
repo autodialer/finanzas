@@ -55,12 +55,12 @@
                 </select>
             </div>
             <div class="col-md-1">
-                <label class="form-label small mb-1 fw-semibold">Forma pago</label>
-                <select name="forma_pago" class="form-select form-select-sm">
+                <label class="form-label small mb-1 fw-semibold">Cuenta</label>
+                <select name="cuenta_id" class="form-select form-select-sm">
                     <option value="">Todas</option>
-                    <option value="efectivo" {{ ($filtros['forma_pago'] ?? '') == 'efectivo' ? 'selected' : '' }}>Efectivo</option>
-                    <option value="transferencia" {{ ($filtros['forma_pago'] ?? '') == 'transferencia' ? 'selected' : '' }}>Transferencia</option>
-                    <option value="tarjeta" {{ ($filtros['forma_pago'] ?? '') == 'tarjeta' ? 'selected' : '' }}>Tarjeta</option>
+                    @foreach($cuentas as $c)
+                        <option value="{{ $c->id }}" {{ ($filtros['cuenta_id'] ?? '') == $c->id ? 'selected' : '' }}>{{ $c->nombre }}</option>
+                    @endforeach
                 </select>
             </div>
             <div class="col-md-1 d-flex gap-1">

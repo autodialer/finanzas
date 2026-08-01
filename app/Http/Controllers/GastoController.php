@@ -14,7 +14,7 @@ class GastoController extends Controller
 {
     public function index(Request $request)
     {
-        $claves = ['fecha_desde', 'fecha_hasta', 'negocio_id', 'proveedor_id', 'categoria_id', 'forma_pago'];
+        $claves = ['fecha_desde', 'fecha_hasta', 'negocio_id', 'proveedor_id', 'categoria_id', 'cuenta_id'];
 
         if ($request->has('fecha_desde') || $request->has('limpiar')) {
             // El usuario envió el formulario de filtros o pidió limpiar
@@ -33,14 +33,15 @@ class GastoController extends Controller
         if (!empty($filtros['negocio_id']))    $query->where('negocio_id', $filtros['negocio_id']);
         if (!empty($filtros['proveedor_id']))  $query->where('proveedor_id', $filtros['proveedor_id']);
         if (!empty($filtros['categoria_id']))  $query->where('categoria_id', $filtros['categoria_id']);
-        if (!empty($filtros['forma_pago']))    $query->where('forma_pago', $filtros['forma_pago']);
+        if (!empty($filtros['cuenta_id']))     $query->where('cuenta_id', $filtros['cuenta_id']);
 
         $gastos      = $query->orderBy('fecha', 'desc')->orderBy('created_at', 'desc')->get();
         $negocios    = Negocio::orderBy('nombre')->get();
         $proveedores = Proveedor::orderBy('nombre')->get();
         $categorias  = Categoria::whereIn('tipo', ['gasto', 'ambos'])->orderBy('nombre')->get();
+        $cuentas     = Cuenta::orderBy('nombre')->get();
 
-        return view('gastos.index', compact('gastos', 'negocios', 'proveedores', 'categorias', 'filtros'));
+        return view('gastos.index', compact('gastos', 'negocios', 'proveedores', 'categorias', 'cuentas', 'filtros'));
     }
 
     public function create()
