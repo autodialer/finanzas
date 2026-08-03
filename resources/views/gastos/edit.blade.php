@@ -86,7 +86,7 @@
                             <div class="d-flex align-items-center flex-wrap gap-3">
                                 <div class="form-check form-switch mb-0">
                                     <input class="form-check-input" type="checkbox" name="tiene_propina" id="tiene_propina"
-                                           value="1" onchange="actualizarDesglose()"
+                                           value="1" onchange="manejarTogglePropina()"
                                            {{ old('tiene_propina', $gasto->tiene_propina) ? 'checked' : '' }}>
                                     <label class="form-check-label fw-semibold" for="tiene_propina">
                                         Incluye propina
@@ -150,6 +150,15 @@
 function manejarFormaPago() {
     const forma = document.getElementById('forma_pago').value;
     document.getElementById('seccion-iva').style.display = forma ? '' : 'none';
+    actualizarDesglose();
+}
+
+function manejarTogglePropina() {
+    const chk = document.getElementById('tiene_propina');
+    const pct = document.getElementById('porcentaje_propina');
+    if (chk.checked && (!pct.value || parseFloat(pct.value) === 0)) {
+        pct.value = 20;
+    }
     actualizarDesglose();
 }
 
