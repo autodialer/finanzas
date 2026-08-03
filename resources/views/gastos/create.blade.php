@@ -86,12 +86,12 @@
                                 <div class="form-check form-switch mb-0">
                                     <input class="form-check-input" type="checkbox" name="tiene_propina" id="tiene_propina"
                                            value="1" onchange="actualizarDesglose()"
-                                           {{ old('tiene_propina') ? 'checked' : '' }}>
+                                           {{ old('tiene_propina', true) ? 'checked' : '' }}>
                                     <label class="form-check-label fw-semibold" for="tiene_propina">
                                         Incluye propina
                                     </label>
                                 </div>
-                                <div id="propina-campos" class="d-flex align-items-center gap-2" style="{{ old('tiene_propina') ? '' : 'display:none!important' }}">
+                                <div id="propina-campos" class="d-flex align-items-center gap-2" style="{{ old('tiene_propina', true) ? '' : 'display:none!important' }}">
                                     <label class="mb-0 small text-muted">Porcentaje:</label>
                                     <div class="input-group input-group-sm" style="width:100px">
                                         <input type="number" step="1" min="0" max="100" name="porcentaje_propina"
