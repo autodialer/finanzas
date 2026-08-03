@@ -102,6 +102,12 @@ class GastoController extends Controller
         return redirect()->route('gastos.index')->with('exito', 'Gasto actualizado correctamente.');
     }
 
+    private function normalizarEncabezado(string $texto): string
+    {
+        $texto = mb_strtolower(trim($texto));
+        return strtr($texto, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ñ' => 'n']);
+    }
+
     private function calcularPropinaeIva(Request $request): array
     {
         $monto = (float) $request->monto;
@@ -174,16 +180,33 @@ class GastoController extends Controller
             return back()->withErrors(['archivo' => 'No se encontró la fila de encabezados en el archivo.']);
         }
 
+        // Localizar columnas de Descripción e Importe por nombre de encabezado,
+        // ya que Amex cambia el orden de columnas entre exportaciones.
+        $colConcepto = null;
+        $colMonto    = null;
+        foreach ($filas[$headerRow] as $idx => $valor) {
+            $encabezado = $this->normalizarEncabezado((string) $valor);
+            if ($colConcepto === null && str_contains($encabezado, 'descripcion')) {
+                $colConcepto = $idx;
+            }
+            if ($colMonto === null && str_contains($encabezado, 'importe')) {
+                $colMonto = $idx;
+            }
+        }
+
+        if ($colConcepto === null || $colMonto === null) {
+            return back()->withErrors(['archivo' => 'No se encontraron las columnas "Descripción" e "Importe" en el archivo.']);
+        }
+
         $importados = 0;
         $omitidos   = 0;
 
         for ($i = $headerRow + 1; $i < count($filas); $i++) {
             $fila = $filas[$i];
 
-            // Columnas Amex: 0=Fecha, 1=FechaCompra, 2=Descripción, 3=Titular, 4=Importe
             $fecha    = trim((string)($fila[0] ?? ''));
-            $concepto = trim((string)($fila[2] ?? ''));
-            $monto    = $fila[4] ?? null;
+            $concepto = trim((string)($fila[$colConcepto] ?? ''));
+            $monto    = $fila[$colMonto] ?? null;
 
             if (empty($fecha) || empty($concepto) || $monto === null || $monto === '') {
                 $omitidos++;
