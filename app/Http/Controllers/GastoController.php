@@ -226,10 +226,16 @@ class GastoController extends Controller
                 continue;
             }
 
+            $proveedor = Proveedor::firstOrCreate([
+                'negocio_id' => $request->negocio_id,
+                'nombre'     => $concepto,
+            ]);
+
             Gasto::create([
                 'negocio_id'        => $request->negocio_id,
                 'categoria_id'      => $request->categoria_id,
                 'cuenta_id'         => $request->cuenta_id,
+                'proveedor_id'      => $proveedor->id,
                 'user_id'           => auth()->id(),
                 'monto'             => (float) $monto,
                 'fecha'             => $fechaStr,

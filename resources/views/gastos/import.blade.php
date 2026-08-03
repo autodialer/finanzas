@@ -96,7 +96,7 @@
                     </thead>
                     <tbody>
                         <tr><td>Fecha</td><td>Fecha del gasto</td></tr>
-                        <tr><td>Descripción</td><td>Concepto</td></tr>
+                        <tr><td>Descripción</td><td>Concepto y Proveedor</td></tr>
                         <tr><td>Importe</td><td>Monto</td></tr>
                     </tbody>
                 </table>
