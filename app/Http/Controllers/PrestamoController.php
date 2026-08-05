@@ -79,6 +79,7 @@ class PrestamoController extends Controller
         $request->validate([
             'fecha'     => 'required|date',
             'monto'     => 'required|numeric|min:0.01',
+            'tipo'      => 'required|in:capital,interes',
             'cuenta_id' => 'required|exists:cuentas,id',
             'notas'     => 'nullable|string',
         ]);
@@ -87,6 +88,8 @@ class PrestamoController extends Controller
             ['nombre' => 'Préstamos', 'tipo' => 'gasto']
         );
 
+        $etiquetaTipo = $request->tipo === 'capital' ? 'capital' : 'interés';
+
         $gasto = Gasto::create([
             'negocio_id'   => $prestamo->negocio_id,
             'categoria_id' => $categoria->id,
@@ -94,7 +97,7 @@ class PrestamoController extends Controller
             'user_id'      => auth()->id(),
             'monto'        => $request->monto,
             'fecha'        => $request->fecha,
-            'concepto'     => 'Pago préstamo: ' . $prestamo->concepto,
+            'concepto'     => "Pago préstamo ({$etiquetaTipo}): " . $prestamo->concepto,
             'forma_pago'   => 'transferencia',
             'notas'        => $request->notas,
         ]);
@@ -104,6 +107,7 @@ class PrestamoController extends Controller
             'gasto_id'    => $gasto->id,
             'fecha'       => $request->fecha,
             'monto'       => $request->monto,
+            'tipo'        => $request->tipo,
             'cuenta_id'   => $request->cuenta_id,
             'notas'       => $request->notas,
             'user_id'     => auth()->id(),

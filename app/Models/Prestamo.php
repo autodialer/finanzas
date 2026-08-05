@@ -31,6 +31,17 @@ class Prestamo extends Model
 
     public function getSaldoPendienteAttribute(): float
     {
-        return round($this->monto_original - $this->pagos()->sum('monto'), 2);
+        $pagadoCapital = $this->pagos()->where('tipo', 'capital')->sum('monto');
+        return round($this->monto_original - $pagadoCapital, 2);
+    }
+
+    public function getPagadoCapitalAttribute(): float
+    {
+        return round($this->pagos()->where('tipo', 'capital')->sum('monto'), 2);
+    }
+
+    public function getPagadoInteresAttribute(): float
+    {
+        return round($this->pagos()->where('tipo', 'interes')->sum('monto'), 2);
     }
 }

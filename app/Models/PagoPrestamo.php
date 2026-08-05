@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class PagoPrestamo extends Model
 {
     protected $table = 'pagos_prestamo';
-    protected $fillable = ['prestamo_id', 'gasto_id', 'fecha', 'monto', 'cuenta_id', 'notas', 'user_id'];
+    protected $fillable = ['prestamo_id', 'gasto_id', 'fecha', 'monto', 'tipo', 'cuenta_id', 'notas', 'user_id'];
 
     public function prestamo()
     {

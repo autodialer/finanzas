@@ -55,9 +55,11 @@
             <div class="card-body d-flex flex-column justify-content-center">
                 <div class="text-muted small">Monto original</div>
                 <div class="fs-5 mb-2">${{ number_format($prestamo->monto_original, 2) }}</div>
-                <div class="text-muted small">Pagado</div>
-                <div class="fs-5 text-success mb-2">${{ number_format($prestamo->pagos->sum('monto'), 2) }}</div>
-                <div class="text-muted small">Saldo pendiente</div>
+                <div class="text-muted small">Pagado a capital</div>
+                <div class="fs-6 text-success">${{ number_format($prestamo->pagado_capital, 2) }}</div>
+                <div class="text-muted small">Pagado en intereses</div>
+                <div class="fs-6 text-warning mb-2">${{ number_format($prestamo->pagado_interes, 2) }}</div>
+                <div class="text-muted small">Saldo pendiente (capital)</div>
                 <div class="fs-4 fw-bold {{ $prestamo->saldo_pendiente > 0 ? 'text-danger' : 'text-success' }}">
                     ${{ number_format($prestamo->saldo_pendiente, 2) }}
                 </div>
@@ -88,7 +90,15 @@
                     </div>
                     @error('monto') <div class="text-danger small">{{ $message }}</div> @enderror
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Tipo de pago</label>
+                    <select name="tipo" class="form-select form-select-sm">
+                        <option value="capital" {{ old('tipo', 'capital') == 'capital' ? 'selected' : '' }}>Capital</option>
+                        <option value="interes" {{ old('tipo') == 'interes' ? 'selected' : '' }}>Interés</option>
+                    </select>
+                    @error('tipo') <div class="text-danger small">{{ $message }}</div> @enderror
+                </div>
+                <div class="col-md-2">
                     <label class="form-label small mb-1">Cuenta (de dónde sale)</label>
                     <select name="cuenta_id" class="form-select form-select-sm">
                         <option value="">Selecciona una cuenta</option>
@@ -124,6 +134,7 @@
             <thead class="table-dark">
                 <tr>
                     <th>Fecha</th>
+                    <th>Tipo</th>
                     <th>Cuenta</th>
                     <th>Notas</th>
                     <th class="text-end">Monto</th>
@@ -134,6 +145,13 @@
                 @forelse($prestamo->pagos as $pago)
                 <tr>
                     <td>{{ \Carbon\Carbon::parse($pago->fecha)->format('d/m/Y') }}</td>
+                    <td>
+                        @if($pago->tipo == 'capital')
+                        <span class="badge bg-success">Capital</span>
+                        @else
+                        <span class="badge bg-warning text-dark">Interés</span>
+                        @endif
+                    </td>
                     <td>{{ $pago->cuenta->nombre }}</td>
                     <td>{{ $pago->notas ?? '-' }}</td>
                     <td class="text-end fw-bold text-danger">${{ number_format($pago->monto, 2) }}</td>
@@ -148,7 +166,7 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="5" class="text-center text-muted py-4">Sin pagos registrados</td>
+                    <td colspan="6" class="text-center text-muted py-4">Sin pagos registrados</td>
                 </tr>
                 @endforelse
             </tbody>
