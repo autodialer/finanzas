@@ -25,7 +25,7 @@ class UserController extends Controller
         $request->validate([
             'name'     => ['required', 'string', 'max:255'],
             'email'    => ['required', 'email', 'unique:users,email'],
-            'role'     => ['required', 'in:admin,usuario'],
+            'role'     => ['required', 'in:admin,gerente,capturista'],
             'password' => ['required', 'confirmed', PasswordRule::min(8)],
         ], [
             'name.required'      => 'El nombre es obligatorio.',
@@ -58,7 +58,7 @@ class UserController extends Controller
         $request->validate([
             'name'     => ['required', 'string', 'max:255'],
             'email'    => ['required', 'email', 'unique:users,email,' . $usuario->id],
-            'role'     => ['required', 'in:admin,usuario'],
+            'role'     => ['required', 'in:admin,gerente,capturista'],
             'password' => ['nullable', 'confirmed', PasswordRule::min(8)],
         ], [
             'name.required'      => 'El nombre es obligatorio.',

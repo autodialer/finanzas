@@ -44,8 +44,11 @@
                     <option value="admin" {{ old('role') === 'admin' ? 'selected' : '' }}>
                         Administrador (acceso total, puede gestionar usuarios)
                     </option>
-                    <option value="usuario" {{ old('role') === 'usuario' ? 'selected' : '' }}>
-                        Usuario (acceso general, sin gestión de usuarios)
+                    <option value="gerente" {{ old('role') === 'gerente' ? 'selected' : '' }}>
+                        Gerente (acceso general, sin gestión de usuarios)
+                    </option>
+                    <option value="capturista" {{ old('role') === 'capturista' ? 'selected' : '' }}>
+                        Capturista (solo captura de movimientos)
                     </option>
                 </select>
             </div>

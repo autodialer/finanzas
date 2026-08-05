@@ -54,9 +54,13 @@
                             <span class="badge bg-dark">
                                 <i class="bi bi-shield-check me-1"></i>Administrador
                             </span>
+                        @elseif($usuario->isGerente())
+                            <span class="badge bg-secondary">
+                                <i class="bi bi-person me-1"></i>Gerente
+                            </span>
                         @else
                             <span class="badge bg-secondary">
-                                <i class="bi bi-person me-1"></i>Usuario
+                                <i class="bi bi-pencil-square me-1"></i>Capturista
                             </span>
                         @endif
                     </td>
