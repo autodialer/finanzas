@@ -20,6 +20,7 @@ use App\Http\Controllers\PeriodoNominaController;
 use App\Http\Controllers\EmpresaController;
 use App\Http\Controllers\TraspasoController;
 use App\Http\Controllers\PerfilController;
+use App\Http\Controllers\PrestamoController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
@@ -54,6 +55,9 @@ Route::middleware('auth')->group(function () {
     Route::get('gastos-importar', [GastoController::class, 'importForm'])->name('gastos.import.form');
     Route::post('gastos-importar', [GastoController::class, 'import'])->name('gastos.import');
     Route::resource('traspasos', TraspasoController::class)->only(['index', 'create', 'store', 'destroy']);
+    Route::resource('prestamos', PrestamoController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
+    Route::post('prestamos/{prestamo}/pagos', [PrestamoController::class, 'storePago'])->name('prestamos.pagos.store');
+    Route::delete('prestamos/{prestamo}/pagos/{pago}', [PrestamoController::class, 'destroyPago'])->name('prestamos.pagos.destroy');
     Route::get('perfil/password', [PerfilController::class, 'editPassword'])->name('perfil.password.edit');
     Route::put('perfil/password', [PerfilController::class, 'updatePassword'])->name('perfil.password.update');
 
