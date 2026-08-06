@@ -201,6 +201,9 @@ document.addEventListener('DOMContentLoaded', actualizarDesglosePago);
                     </td>
                     <td class="text-end fw-bold text-danger">${{ number_format($pago->monto, 2) }}</td>
                     <td>
+                        <a href="{{ route('prestamos.pagos.edit', [$prestamo, $pago]) }}" class="btn btn-sm btn-warning">
+                            <i class="bi bi-pencil"></i>
+                        </a>
                         <form action="{{ route('prestamos.pagos.destroy', [$prestamo, $pago]) }}" method="POST" class="d-inline">
                             @csrf @method('DELETE')
                             <button onclick="return confirm('¿Eliminar este pago? También se eliminará el gasto asociado.')" class="btn btn-sm btn-danger">

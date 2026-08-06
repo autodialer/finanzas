@@ -57,6 +57,8 @@ Route::middleware('auth')->group(function () {
     Route::resource('traspasos', TraspasoController::class)->only(['index', 'create', 'store', 'destroy']);
     Route::resource('prestamos', PrestamoController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
     Route::post('prestamos/{prestamo}/pagos', [PrestamoController::class, 'storePago'])->name('prestamos.pagos.store');
+    Route::get('prestamos/{prestamo}/pagos/{pago}/edit', [PrestamoController::class, 'editPago'])->name('prestamos.pagos.edit');
+    Route::put('prestamos/{prestamo}/pagos/{pago}', [PrestamoController::class, 'updatePago'])->name('prestamos.pagos.update');
     Route::delete('prestamos/{prestamo}/pagos/{pago}', [PrestamoController::class, 'destroyPago'])->name('prestamos.pagos.destroy');
     Route::get('perfil/password', [PerfilController::class, 'editPassword'])->name('perfil.password.edit');
     Route::put('perfil/password', [PerfilController::class, 'updatePassword'])->name('perfil.password.update');

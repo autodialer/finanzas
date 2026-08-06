@@ -123,6 +123,52 @@ class PrestamoController extends Controller
         return redirect()->route('prestamos.show', $prestamo)->with('exito', 'Pago registrado correctamente.');
     }
 
+    public function editPago(Prestamo $prestamo, PagoPrestamo $pago)
+    {
+        $cuentas = $this->aplicarFiltroNegocio(Cuenta::with('negocio'))
+            ->orderBy('negocio_id')->orderBy('nombre')->get();
+
+        return view('prestamos.pagos_edit', compact('prestamo', 'pago', 'cuentas'));
+    }
+
+    public function updatePago(Request $request, Prestamo $prestamo, PagoPrestamo $pago)
+    {
+        $request->validate([
+            'fecha'     => 'required|date',
+            'monto'     => 'required|numeric|min:0.01',
+            'tipo'      => 'required|in:capital,interes',
+            'tiene_iva' => 'nullable|boolean',
+            'cuenta_id' => 'required|exists:cuentas,id',
+            'notas'     => 'nullable|string',
+        ]);
+
+        $etiquetaTipo = $request->tipo === 'capital' ? 'capital' : 'interés';
+        $tieneIva     = $request->boolean('tiene_iva');
+        $montoIva     = $tieneIva ? round($request->monto * 16 / 116, 2) : 0;
+
+        $pago->update([
+            'fecha'     => $request->fecha,
+            'monto'     => $request->monto,
+            'tipo'      => $request->tipo,
+            'tiene_iva' => $tieneIva,
+            'monto_iva' => $montoIva,
+            'cuenta_id' => $request->cuenta_id,
+            'notas'     => $request->notas,
+        ]);
+
+        $pago->gasto?->update([
+            'cuenta_id' => $request->cuenta_id,
+            'monto'     => $request->monto,
+            'fecha'     => $request->fecha,
+            'concepto'  => "Pago préstamo ({$etiquetaTipo}): " . $prestamo->concepto,
+            'notas'     => $request->notas,
+            'tiene_iva' => $tieneIva,
+            'monto_iva' => $montoIva,
+        ]);
+
+        return redirect()->route('prestamos.show', $prestamo)->with('exito', 'Pago actualizado correctamente.');
+    }
+
     public function destroyPago(Prestamo $prestamo, PagoPrestamo $pago)
     {
         $pago->gasto?->delete();
