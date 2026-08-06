@@ -80,6 +80,7 @@ class PrestamoController extends Controller
             'fecha'     => 'required|date',
             'monto'     => 'required|numeric|min:0.01',
             'tipo'      => 'required|in:capital,interes',
+            'tiene_iva' => 'nullable|boolean',
             'cuenta_id' => 'required|exists:cuentas,id',
             'notas'     => 'nullable|string',
         ]);
@@ -89,6 +90,8 @@ class PrestamoController extends Controller
         );
 
         $etiquetaTipo = $request->tipo === 'capital' ? 'capital' : 'interés';
+        $tieneIva     = $request->boolean('tiene_iva');
+        $montoIva     = $tieneIva ? round($request->monto * 16 / 116, 2) : 0;
 
         $gasto = Gasto::create([
             'negocio_id'   => $prestamo->negocio_id,
@@ -100,6 +103,8 @@ class PrestamoController extends Controller
             'concepto'     => "Pago préstamo ({$etiquetaTipo}): " . $prestamo->concepto,
             'forma_pago'   => 'transferencia',
             'notas'        => $request->notas,
+            'tiene_iva'    => $tieneIva,
+            'monto_iva'    => $montoIva,
         ]);
 
         PagoPrestamo::create([
@@ -108,6 +113,8 @@ class PrestamoController extends Controller
             'fecha'       => $request->fecha,
             'monto'       => $request->monto,
             'tipo'        => $request->tipo,
+            'tiene_iva'   => $tieneIva,
+            'monto_iva'   => $montoIva,
             'cuenta_id'   => $request->cuenta_id,
             'notas'       => $request->notas,
             'user_id'     => auth()->id(),
