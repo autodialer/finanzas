@@ -55,12 +55,15 @@
                         <div class="form-check form-switch mb-0">
                             <input class="form-check-input" type="checkbox" name="tiene_iva" id="pago-tiene-iva"
                                    value="1" onchange="actualizarDesglosePago()" {{ old('tiene_iva', $pago->tiene_iva) ? 'checked' : '' }}>
-                            <label class="form-check-label fw-semibold" for="pago-tiene-iva">Incluye IVA (16%)</label>
+                            <label class="form-check-label fw-semibold" for="pago-tiene-iva">Incluye IVA</label>
                         </div>
-                        <div id="pago-iva-desglose" class="d-flex flex-wrap gap-3 align-items-center" style="display:none">
+                        <div id="pago-iva-campos" class="d-flex flex-wrap gap-2 align-items-center" style="display:none">
+                            <label class="mb-0 small text-muted">IVA (según tu estado de cuenta):</label>
+                            <div class="input-group input-group-sm" style="width:140px">
+                                <span class="input-group-text">$</span>
+                                <input type="number" step="0.01" name="monto_iva" id="pago-monto-iva" class="form-control" value="{{ old('monto_iva', $pago->monto_iva) }}" oninput="actualizarDesglosePago(true)">
+                            </div>
                             <span class="text-muted small">Subtotal: <strong id="pago-txt-base">$0.00</strong></span>
-                            <span class="text-muted small">IVA 16%: <strong class="text-warning" id="pago-txt-iva">$0.00</strong></span>
-                            <span class="text-muted small">Total: <strong class="text-danger" id="pago-txt-total">$0.00</strong></span>
                         </div>
                     </div>
                 </div>
@@ -76,23 +79,25 @@
 </div>
 
 <script>
-function actualizarDesglosePago() {
-    const monto   = parseFloat(document.getElementById('pago-monto').value) || 0;
-    const conIva  = document.getElementById('pago-tiene-iva').checked;
-    const desglose = document.getElementById('pago-iva-desglose');
+function actualizarDesglosePago(editadoManualmente) {
+    const monto    = parseFloat(document.getElementById('pago-monto').value) || 0;
+    const conIva   = document.getElementById('pago-tiene-iva').checked;
+    const campos   = document.getElementById('pago-iva-campos');
+    const ivaInput = document.getElementById('pago-monto-iva');
 
     if (conIva) {
-        const iva  = Math.round(monto * 16 / 116 * 100) / 100;
+        campos.style.display = '';
+        if (!editadoManualmente && (!ivaInput.value || parseFloat(ivaInput.value) === 0)) {
+            ivaInput.value = (Math.round(monto * 16 / 116 * 100) / 100).toFixed(2);
+        }
+        const iva  = parseFloat(ivaInput.value) || 0;
         const base = Math.round((monto - iva) * 100) / 100;
-        document.getElementById('pago-txt-base').textContent  = '$' + base.toFixed(2);
-        document.getElementById('pago-txt-iva').textContent   = '$' + iva.toFixed(2);
-        document.getElementById('pago-txt-total').textContent = '$' + monto.toFixed(2);
-        desglose.style.display = '';
+        document.getElementById('pago-txt-base').textContent = '$' + base.toFixed(2);
     } else {
-        desglose.style.display = 'none';
+        campos.style.display = 'none';
     }
 }
 
-document.addEventListener('DOMContentLoaded', actualizarDesglosePago);
+document.addEventListener('DOMContentLoaded', function () { actualizarDesglosePago(true); });
 </script>
 @endsection

@@ -81,6 +81,7 @@ class PrestamoController extends Controller
             'monto'     => 'required|numeric|min:0.01',
             'tipo'      => 'required|in:capital,interes',
             'tiene_iva' => 'nullable|boolean',
+            'monto_iva' => 'nullable|numeric|min:0',
             'cuenta_id' => 'required|exists:cuentas,id',
             'notas'     => 'nullable|string',
         ]);
@@ -91,7 +92,7 @@ class PrestamoController extends Controller
 
         $etiquetaTipo = $request->tipo === 'capital' ? 'capital' : 'interés';
         $tieneIva     = $request->boolean('tiene_iva');
-        $montoIva     = $tieneIva ? round($request->monto * 16 / 116, 2) : 0;
+        $montoIva     = $tieneIva ? round((float) $request->input('monto_iva', 0), 2) : 0;
 
         $gasto = Gasto::create([
             'negocio_id'   => $prestamo->negocio_id,
@@ -138,13 +139,14 @@ class PrestamoController extends Controller
             'monto'     => 'required|numeric|min:0.01',
             'tipo'      => 'required|in:capital,interes',
             'tiene_iva' => 'nullable|boolean',
+            'monto_iva' => 'nullable|numeric|min:0',
             'cuenta_id' => 'required|exists:cuentas,id',
             'notas'     => 'nullable|string',
         ]);
 
         $etiquetaTipo = $request->tipo === 'capital' ? 'capital' : 'interés';
         $tieneIva     = $request->boolean('tiene_iva');
-        $montoIva     = $tieneIva ? round($request->monto * 16 / 116, 2) : 0;
+        $montoIva     = $tieneIva ? round((float) $request->input('monto_iva', 0), 2) : 0;
 
         $pago->update([
             'fecha'     => $request->fecha,
