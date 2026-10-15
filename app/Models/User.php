@@ -45,11 +45,14 @@ class User extends Authenticatable
     }
 
     // IDs de negocios que este usuario puede ver.
-    // Admin ve todos. Los demás no ven negocios privados.
+    // Admin ve todos. Capturista solo su negocio asignado. Gerente ve los no privados.
     public function negociosPermitidos()
     {
         if ($this->isAdmin()) {
             return null; // null = sin restricción
+        }
+        if ($this->isCapturista()) {
+            return $this->negocio_id ? collect([$this->negocio_id]) : collect();
         }
         return Negocio::where('privado', false)->pluck('id');
     }

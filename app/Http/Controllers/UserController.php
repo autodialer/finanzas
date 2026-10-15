@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Negocio;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Password;
@@ -17,31 +18,35 @@ class UserController extends Controller
 
     public function create()
     {
-        return view('usuarios.create');
+        $negocios = Negocio::orderBy('nombre')->get();
+        return view('usuarios.create', compact('negocios'));
     }
 
     public function store(Request $request)
     {
         $request->validate([
-            'name'     => ['required', 'string', 'max:255'],
-            'email'    => ['required', 'email', 'unique:users,email'],
-            'role'     => ['required', 'in:admin,gerente,capturista'],
-            'password' => ['required', 'confirmed', PasswordRule::min(8)],
+            'name'       => ['required', 'string', 'max:255'],
+            'email'      => ['required', 'email', 'unique:users,email'],
+            'role'       => ['required', 'in:admin,gerente,capturista'],
+            'negocio_id' => ['required_if:role,capturista', 'nullable', 'exists:negocios,id'],
+            'password'   => ['required', 'confirmed', PasswordRule::min(8)],
         ], [
-            'name.required'      => 'El nombre es obligatorio.',
-            'email.required'     => 'El correo es obligatorio.',
-            'email.unique'       => 'Este correo ya está registrado.',
-            'role.required'      => 'El rol es obligatorio.',
-            'password.required'  => 'La contraseña es obligatoria.',
-            'password.confirmed' => 'Las contraseñas no coinciden.',
-            'password.min'       => 'La contraseña debe tener al menos 8 caracteres.',
+            'name.required'         => 'El nombre es obligatorio.',
+            'email.required'        => 'El correo es obligatorio.',
+            'email.unique'          => 'Este correo ya está registrado.',
+            'role.required'         => 'El rol es obligatorio.',
+            'negocio_id.required_if'=> 'El negocio es obligatorio para el rol capturista.',
+            'password.required'     => 'La contraseña es obligatoria.',
+            'password.confirmed'    => 'Las contraseñas no coinciden.',
+            'password.min'          => 'La contraseña debe tener al menos 8 caracteres.',
         ]);
 
         User::create([
-            'name'     => $request->name,
-            'email'    => $request->email,
-            'role'     => $request->role,
-            'password' => $request->password,
+            'name'       => $request->name,
+            'email'      => $request->email,
+            'role'       => $request->role,
+            'negocio_id' => $request->role === 'capturista' ? $request->negocio_id : null,
+            'password'   => $request->password,
         ]);
 
         return redirect()->route('usuarios.index')
@@ -50,29 +55,33 @@ class UserController extends Controller
 
     public function edit(User $usuario)
     {
-        return view('usuarios.edit', compact('usuario'));
+        $negocios = Negocio::orderBy('nombre')->get();
+        return view('usuarios.edit', compact('usuario', 'negocios'));
     }
 
     public function update(Request $request, User $usuario)
     {
         $request->validate([
-            'name'     => ['required', 'string', 'max:255'],
-            'email'    => ['required', 'email', 'unique:users,email,' . $usuario->id],
-            'role'     => ['required', 'in:admin,gerente,capturista'],
-            'password' => ['nullable', 'confirmed', PasswordRule::min(8)],
+            'name'       => ['required', 'string', 'max:255'],
+            'email'      => ['required', 'email', 'unique:users,email,' . $usuario->id],
+            'role'       => ['required', 'in:admin,gerente,capturista'],
+            'negocio_id' => ['required_if:role,capturista', 'nullable', 'exists:negocios,id'],
+            'password'   => ['nullable', 'confirmed', PasswordRule::min(8)],
         ], [
-            'name.required'      => 'El nombre es obligatorio.',
-            'email.required'     => 'El correo es obligatorio.',
-            'email.unique'       => 'Este correo ya está registrado.',
-            'role.required'      => 'El rol es obligatorio.',
-            'password.confirmed' => 'Las contraseñas no coinciden.',
-            'password.min'       => 'La contraseña debe tener al menos 8 caracteres.',
+            'name.required'          => 'El nombre es obligatorio.',
+            'email.required'         => 'El correo es obligatorio.',
+            'email.unique'           => 'Este correo ya está registrado.',
+            'role.required'          => 'El rol es obligatorio.',
+            'negocio_id.required_if' => 'El negocio es obligatorio para el rol capturista.',
+            'password.confirmed'     => 'Las contraseñas no coinciden.',
+            'password.min'           => 'La contraseña debe tener al menos 8 caracteres.',
         ]);
 
         $data = [
-            'name'  => $request->name,
-            'email' => $request->email,
-            'role'  => $request->role,
+            'name'       => $request->name,
+            'email'      => $request->email,
+            'role'       => $request->role,
+            'negocio_id' => $request->role === 'capturista' ? $request->negocio_id : null,
         ];
 
         if ($request->filled('password')) {

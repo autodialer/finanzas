@@ -31,13 +31,18 @@
                 </div>
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Negocio</label>
-                    <select name="negocio_id" class="form-select">
-                        <option value="">Selecciona un negocio</option>
-                        @foreach($negocios as $negocio)
-                        <option value="{{ $negocio->id }}" {{ old('negocio_id', $gasto->negocio_id) == $negocio->id ? 'selected' : '' }}>{{ $negocio->nombre }}</option>
-                        @endforeach
-                    </select>
-                    @error('negocio_id') <div class="text-danger small">{{ $message }}</div> @enderror
+                    @if(auth()->user()->isCapturista())
+                        <input type="hidden" name="negocio_id" value="{{ $gasto->negocio_id }}">
+                        <p class="form-control-plaintext fw-semibold">{{ $gasto->negocio->nombre ?? '—' }}</p>
+                    @else
+                        <select name="negocio_id" class="form-select">
+                            <option value="">Selecciona un negocio</option>
+                            @foreach($negocios as $negocio)
+                            <option value="{{ $negocio->id }}" {{ old('negocio_id', $gasto->negocio_id) == $negocio->id ? 'selected' : '' }}>{{ $negocio->nombre }}</option>
+                            @endforeach
+                        </select>
+                        @error('negocio_id') <div class="text-danger small">{{ $message }}</div> @enderror
+                    @endif
                 </div>
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Categoría</label>

@@ -40,7 +40,7 @@
 
             <div class="mb-3">
                 <label class="form-label fw-semibold">Rol</label>
-                <select name="role" class="form-select @error('role') is-invalid @enderror" required>
+                <select id="rolSelect" name="role" class="form-select @error('role') is-invalid @enderror" required>
                     <option value="admin" {{ old('role', $usuario->role) === 'admin' ? 'selected' : '' }}>
                         Administrador (acceso total, puede gestionar usuarios)
                     </option>
@@ -51,6 +51,19 @@
                         Capturista (solo captura de movimientos)
                     </option>
                 </select>
+            </div>
+
+            <div class="mb-3" id="negocioField" style="display:none;">
+                <label class="form-label fw-semibold">Negocio asignado</label>
+                <select name="negocio_id" class="form-select @error('negocio_id') is-invalid @enderror">
+                    <option value="">— Selecciona un negocio —</option>
+                    @foreach($negocios as $negocio)
+                    <option value="{{ $negocio->id }}" {{ old('negocio_id', $usuario->negocio_id) == $negocio->id ? 'selected' : '' }}>
+                        {{ $negocio->nombre }}
+                    </option>
+                    @endforeach
+                </select>
+                @error('negocio_id') <div class="text-danger small">{{ $message }}</div> @enderror
             </div>
 
             <hr class="my-3">
@@ -78,4 +91,21 @@
         </form>
     </div>
 </div>
+
+<script>
+(function () {
+    const rol = document.getElementById('rolSelect');
+    const campo = document.getElementById('negocioField');
+    const select = campo.querySelector('select');
+
+    function toggle() {
+        const esCapturista = rol.value === 'capturista';
+        campo.style.display = esCapturista ? '' : 'none';
+        select.required = esCapturista;
+    }
+
+    rol.addEventListener('change', toggle);
+    toggle();
+})();
+</script>
 @endsection

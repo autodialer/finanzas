@@ -52,6 +52,11 @@ class IngresoController extends Controller
 
     public function store(Request $request)
     {
+        $user = auth()->user();
+        if ($user->isCapturista()) {
+            $request->merge(['negocio_id' => $user->negocio_id]);
+        }
+
         $request->validate([
             'negocio_id'  => 'required|exists:negocios,id',
             'categoria_id'=> 'required|exists:categorias,id',
@@ -71,6 +76,8 @@ class IngresoController extends Controller
 
     public function edit(Ingreso $ingreso)
     {
+        $this->autorizarAccesoNegocio($ingreso->negocio_id);
+
         $negocios   = $this->negociosParaCaptura();
         $categorias = Categoria::whereIn('tipo', ['ingreso', 'ambos'])->get();
         $clientes   = Cliente::orderBy('nombre')->get();
@@ -80,6 +87,13 @@ class IngresoController extends Controller
 
     public function update(Request $request, Ingreso $ingreso)
     {
+        $this->autorizarAccesoNegocio($ingreso->negocio_id);
+
+        $user = auth()->user();
+        if ($user->isCapturista()) {
+            $request->merge(['negocio_id' => $user->negocio_id]);
+        }
+
         $request->validate([
             'negocio_id'  => 'required|exists:negocios,id',
             'categoria_id'=> 'required|exists:categorias,id',
@@ -112,6 +126,7 @@ class IngresoController extends Controller
 
     public function destroy(Ingreso $ingreso)
     {
+        $this->autorizarAccesoNegocio($ingreso->negocio_id);
         $ingreso->delete();
         return redirect()->route('ingresos.index')->with('exito', 'Ingreso eliminado correctamente.');
     }

@@ -16,15 +16,20 @@
             @csrf
             <div class="mb-3">
                 <label class="form-label">Negocio</label>
-                <select name="negocio_id" class="form-select">
-                    <option value="">Selecciona un negocio</option>
-                    @foreach($negocios as $negocio)
-                    <option value="{{ $negocio->id }}" {{ old('negocio_id') == $negocio->id ? 'selected' : '' }}>
-                        {{ $negocio->nombre }}
-                    </option>
-                    @endforeach
-                </select>
-                @error('negocio_id') <div class="text-danger small">{{ $message }}</div> @enderror
+                @if(auth()->user()->isCapturista())
+                    <input type="hidden" name="negocio_id" value="{{ auth()->user()->negocio_id }}">
+                    <p class="form-control-plaintext fw-semibold">{{ $negocios->first()->nombre ?? '—' }}</p>
+                @else
+                    <select name="negocio_id" class="form-select">
+                        <option value="">Selecciona un negocio</option>
+                        @foreach($negocios as $negocio)
+                        <option value="{{ $negocio->id }}" {{ old('negocio_id') == $negocio->id ? 'selected' : '' }}>
+                            {{ $negocio->nombre }}
+                        </option>
+                        @endforeach
+                    </select>
+                    @error('negocio_id') <div class="text-danger small">{{ $message }}</div> @enderror
+                @endif
             </div>
             <div class="mb-3">
                 <label class="form-label">Nombre de la Cuenta</label>

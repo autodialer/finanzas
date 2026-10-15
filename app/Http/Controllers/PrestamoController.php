@@ -38,6 +38,11 @@ class PrestamoController extends Controller
 
     public function store(Request $request)
     {
+        $user = auth()->user();
+        if ($user->isCapturista()) {
+            $request->merge(['negocio_id' => $user->negocio_id]);
+        }
+
         $request->validate([
             'negocio_id'     => 'required|exists:negocios,id',
             'banco_id'       => 'required|exists:bancos,id',
@@ -57,6 +62,7 @@ class PrestamoController extends Controller
 
     public function show(Prestamo $prestamo)
     {
+        $this->autorizarAccesoNegocio($prestamo->negocio_id);
         $prestamo->load('negocio', 'banco', 'pagos.cuenta');
         $cuentas = $this->aplicarFiltroNegocio(Cuenta::with('negocio'))
             ->orderBy('negocio_id')->orderBy('nombre')->get();
@@ -66,6 +72,8 @@ class PrestamoController extends Controller
 
     public function destroy(Prestamo $prestamo)
     {
+        $this->autorizarAccesoNegocio($prestamo->negocio_id);
+
         foreach ($prestamo->pagos as $pago) {
             $pago->gasto?->delete();
         }
@@ -76,6 +84,7 @@ class PrestamoController extends Controller
 
     public function storePago(Request $request, Prestamo $prestamo)
     {
+        $this->autorizarAccesoNegocio($prestamo->negocio_id);
         $request->validate([
             'fecha'     => 'required|date',
             'monto'     => 'required|numeric|min:0.01',
@@ -126,6 +135,7 @@ class PrestamoController extends Controller
 
     public function editPago(Prestamo $prestamo, PagoPrestamo $pago)
     {
+        $this->autorizarAccesoNegocio($prestamo->negocio_id);
         $cuentas = $this->aplicarFiltroNegocio(Cuenta::with('negocio'))
             ->orderBy('negocio_id')->orderBy('nombre')->get();
 
@@ -134,6 +144,7 @@ class PrestamoController extends Controller
 
     public function updatePago(Request $request, Prestamo $prestamo, PagoPrestamo $pago)
     {
+        $this->autorizarAccesoNegocio($prestamo->negocio_id);
         $request->validate([
             'fecha'     => 'required|date',
             'monto'     => 'required|numeric|min:0.01',
@@ -173,6 +184,7 @@ class PrestamoController extends Controller
 
     public function destroyPago(Prestamo $prestamo, PagoPrestamo $pago)
     {
+        $this->autorizarAccesoNegocio($prestamo->negocio_id);
         $pago->gasto?->delete();
         $pago->delete();
 

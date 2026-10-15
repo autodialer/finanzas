@@ -88,6 +88,10 @@ class TraspasoController extends Controller
 
     public function destroy(Traspaso $traspaso)
     {
+        $traspaso->load('cuentaOrigen');
+        if ($traspaso->cuentaOrigen) {
+            $this->autorizarAccesoNegocio($traspaso->cuentaOrigen->negocio_id);
+        }
         $traspaso->delete();
         return redirect()->route('traspasos.index')->with('exito', 'Traspaso eliminado correctamente.');
     }

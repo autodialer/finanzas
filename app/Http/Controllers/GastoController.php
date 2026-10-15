@@ -55,6 +55,11 @@ class GastoController extends Controller
 
     public function store(Request $request)
     {
+        $user = auth()->user();
+        if ($user->isCapturista()) {
+            $request->merge(['negocio_id' => $user->negocio_id]);
+        }
+
         $request->validate([
             'negocio_id'        => 'required|exists:negocios,id',
             'categoria_id'      => 'required|exists:categorias,id',
@@ -75,6 +80,8 @@ class GastoController extends Controller
 
     public function edit(Gasto $gasto)
     {
+        $this->autorizarAccesoNegocio($gasto->negocio_id);
+
         $negocios    = $this->negociosParaCaptura();
         $categorias  = Categoria::whereIn('tipo', ['gasto', 'ambos'])->get();
         $proveedores = Proveedor::orderBy('nombre')->get();
@@ -84,6 +91,13 @@ class GastoController extends Controller
 
     public function update(Request $request, Gasto $gasto)
     {
+        $this->autorizarAccesoNegocio($gasto->negocio_id);
+
+        $user = auth()->user();
+        if ($user->isCapturista()) {
+            $request->merge(['negocio_id' => $user->negocio_id]);
+        }
+
         $request->validate([
             'negocio_id'        => 'required|exists:negocios,id',
             'categoria_id'      => 'required|exists:categorias,id',
@@ -142,6 +156,7 @@ class GastoController extends Controller
 
     public function destroy(Gasto $gasto)
     {
+        $this->autorizarAccesoNegocio($gasto->negocio_id);
         $gasto->delete();
         return redirect()->route('gastos.index')->with('exito', 'Gasto eliminado correctamente.');
     }
@@ -156,6 +171,11 @@ class GastoController extends Controller
 
     public function import(Request $request)
     {
+        $user = auth()->user();
+        if ($user->isCapturista()) {
+            $request->merge(['negocio_id' => $user->negocio_id]);
+        }
+
         $request->validate([
             'negocio_id'   => 'required|exists:negocios,id',
             'categoria_id' => 'required|exists:categorias,id',

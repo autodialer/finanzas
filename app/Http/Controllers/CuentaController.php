@@ -24,6 +24,11 @@ class CuentaController extends Controller
 
     public function store(Request $request)
     {
+        $user = auth()->user();
+        if ($user->isCapturista()) {
+            $request->merge(['negocio_id' => $user->negocio_id]);
+        }
+
         $request->validate([
             'negocio_id' => 'required|exists:negocios,id',
             'tipo' => 'required|in:efectivo,banco',
@@ -35,6 +40,8 @@ class CuentaController extends Controller
 
     public function edit(Cuenta $cuenta)
     {
+        $this->autorizarAccesoNegocio($cuenta->negocio_id);
+
         $negocios = $this->negociosVisibles();
         $bancos = Banco::all();
         return view('cuentas.edit', compact('cuenta', 'negocios', 'bancos'));
@@ -42,6 +49,13 @@ class CuentaController extends Controller
 
     public function update(Request $request, Cuenta $cuenta)
     {
+        $this->autorizarAccesoNegocio($cuenta->negocio_id);
+
+        $user = auth()->user();
+        if ($user->isCapturista()) {
+            $request->merge(['negocio_id' => $user->negocio_id]);
+        }
+
         $request->validate([
             'negocio_id' => 'required|exists:negocios,id',
             'tipo' => 'required|in:efectivo,banco',
@@ -53,6 +67,7 @@ class CuentaController extends Controller
 
     public function destroy(Cuenta $cuenta)
     {
+        $this->autorizarAccesoNegocio($cuenta->negocio_id);
         $cuenta->delete();
         return redirect()->route('cuentas.index')->with('exito', 'Cuenta eliminada correctamente.');
     }

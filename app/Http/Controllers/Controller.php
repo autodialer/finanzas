@@ -32,22 +32,43 @@ abstract class Controller
         return $q->get();
     }
 
-    // Todos los negocios para formularios de captura (gerentes pueden capturar en negocios privados).
+    // Todos los negocios para formularios de captura.
+    // Capturista solo ve su negocio asignado.
     protected function negociosParaCaptura()
     {
+        $user = auth()->user();
+        if ($user->isCapturista()) {
+            return \App\Models\Negocio::where('id', $user->negocio_id)->orderBy('nombre')->get();
+        }
         return \App\Models\Negocio::orderBy('nombre')->get();
     }
 
-    // Filtra reportes/listados: no-admin ve registros de negocios públicos + los que él mismo capturó.
+    // Filtra reportes/listados: capturista solo ve su negocio; gerente ve públicos + propios.
     protected function aplicarFiltroReportes($query, string $columna = 'negocio_id')
     {
-        if (auth()->user()->isAdmin()) {
+        $user = auth()->user();
+        if ($user->isAdmin()) {
             return $query;
+        }
+        if ($user->isCapturista()) {
+            if (!$user->negocio_id) {
+                return $query->whereRaw('0 = 1'); // sin negocio asignado → no ve nada
+            }
+            return $query->where($columna, $user->negocio_id);
         }
         $negociosPublicos = \App\Models\Negocio::where('privado', false)->pluck('id');
         return $query->where(function ($q) use ($negociosPublicos, $columna) {
             $q->whereIn($columna, $negociosPublicos)
               ->orWhere('user_id', auth()->id());
         });
+    }
+
+    // Lanza 403 si el usuario capturista intenta acceder a un negocio que no es el suyo.
+    protected function autorizarAccesoNegocio(int $negocioId): void
+    {
+        $user = auth()->user();
+        if ($user->isCapturista() && $user->negocio_id !== $negocioId) {
+            abort(403, 'No tienes permiso para acceder a este registro.');
+        }
     }
 }
