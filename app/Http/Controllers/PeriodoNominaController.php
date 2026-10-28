@@ -148,6 +148,11 @@ class PeriodoNominaController extends Controller
         );
 
         foreach ($nomina->nominas as $linea) {
+            // Un empleado sin pago en el período no genera gasto
+            if ((float) $linea->monto <= 0) {
+                continue;
+            }
+
             $cuentaEfectiva = $linea->cuenta ?? $nomina->cuenta;
 
             Gasto::create([
