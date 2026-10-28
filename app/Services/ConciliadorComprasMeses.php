@@ -16,7 +16,7 @@ use Carbon\Carbon;
  * El renglón trae (ver AfirmeTarjetaParser): descripcion, monto_original,
  * numero_pago, total_pagos, mensualidad y saldo_pendiente (opcionales; el saldo
  * es el que queda después del pago del periodo), fecha del cargo y, si se
- * conoce, periodo_inicio / periodo_fin del estado de cuenta.
+ * conocen, periodo_inicio / periodo_fin del estado de cuenta y fecha_compra.
  */
 class ConciliadorComprasMeses
 {
@@ -40,9 +40,13 @@ class ConciliadorComprasMeses
             return $this->resultado($avisos ? self::DIFERENCIA : self::VERIFICADA, $renglon, $compra, $avisos, $compra->fecha_primer_cargo);
         }
 
-        return $numero === 1
-            ? $this->resultado(self::CREAR, $renglon, null, [], $fecha)
-            : $this->resultado(self::SIN_PLAN, $renglon, null, [], $fecha->copy()->subMonthsNoOverflow($numero - 1));
+        // Si el estado de cuenta trae la fecha de compra (Amex), el primer cargo no puede ser anterior
+        $primerCargo = $fecha->copy()->subMonthsNoOverflow($numero - 1);
+        if (!empty($renglon['fecha_compra']) && $primerCargo->lt(Carbon::parse($renglon['fecha_compra']))) {
+            $primerCargo = Carbon::parse($renglon['fecha_compra']);
+        }
+
+        return $this->resultado($numero === 1 ? self::CREAR : self::SIN_PLAN, $renglon, null, [], $primerCargo);
     }
 
     private function verificar(CompraMeses $compra, array $renglon, int $numero, Carbon $fecha): array
