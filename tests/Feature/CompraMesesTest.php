@@ -66,6 +66,33 @@ class CompraMesesTest extends TestCase
         return CompraMeses::latest('id')->firstOrFail();
     }
 
+    public function test_concilia_cada_renglon_con_su_plan_aunque_coincidan_monto_y_descripcion(): void
+    {
+        $plan = fn (int $meses, float $mensualidad, string $fecha) => CompraMeses::registrar($this->tarjeta, [
+            'cuenta_id' => $this->tarjeta->id, 'descripcion' => 'TIENDA EN LINEA FICTICIA', 'monto_original' => 1199.98,
+            'meses' => $meses, 'mensualidad' => $mensualidad, 'fecha_compra' => $fecha, 'fecha_primer_cargo' => $fecha,
+        ], $this->categoria->id, false, auth()->id());
+        $doce  = $plan(12, 100, '2026-03-15');
+        $seisA = $plan(6, 200, '2026-04-21');
+        $seisB = $plan(6, 200, '2026-04-21');
+
+        $renglon = fn (int $numero, int $meses, float $pago, float $saldo, string $fecha) => [
+            'descripcion' => 'TIENDA EN LINEA FICTICIA MEXICO', 'monto_original' => 1199.98, 'numero_pago' => $numero, 'total_pagos' => $meses,
+            'mensualidad' => $pago, 'saldo_pendiente' => $saldo, 'fecha' => $fecha, 'periodo_inicio' => '2026-05-23', 'periodo_fin' => '2026-06-22',
+        ];
+        $conciliador = new ConciliadorComprasMeses($this->tarjeta);
+        // Los dos a 6 meses vienen antes que el de 12: antes se emparejaban los tres con el primer plan del monto
+        $resultados = [
+            $conciliador->conciliar($renglon(3, 6, 200, 599.98, '2026-06-21')),
+            $conciliador->conciliar($renglon(3, 6, 200, 599.98, '2026-06-21')),
+            $conciliador->conciliar($renglon(4, 12, 100, 799.98, '2026-06-15')),
+        ];
+
+        $this->assertSame([ConciliadorComprasMeses::VERIFICADA, ConciliadorComprasMeses::VERIFICADA, ConciliadorComprasMeses::VERIFICADA], array_column($resultados, 'accion'));
+        $this->assertSame([$seisA->id, $seisB->id, $doce->id], array_column($resultados, 'compra_id'));
+        $this->assertSame([[], [], []], array_column($resultados, 'avisos'));
+    }
+
     public function test_calcula_calendario_pagos_y_saldo(): void
     {
         $compra = $this->crearCompra();
@@ -228,7 +255,8 @@ class CompraMesesTest extends TestCase
         $this->assertSame(ConciliadorComprasMeses::VERIFICADA, $ok['accion']);
         $this->assertSame($compra->id, $ok['compra_id']);
 
-        $mal = $conciliador->conciliar($renglon + ['numero_pago' => 3, 'saldo_pendiente' => 3333.34]);
+        // Otro estado de cuenta: en uno mismo cada plan se empareja con un solo renglón
+        $mal = (new ConciliadorComprasMeses($this->tarjeta))->conciliar($renglon + ['numero_pago' => 3, 'saldo_pendiente' => 3333.34]);
         $this->assertSame(ConciliadorComprasMeses::DIFERENCIA, $mal['accion']);
         $this->assertCount(2, $mal['avisos']);
 

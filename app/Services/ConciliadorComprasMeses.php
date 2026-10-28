@@ -25,6 +25,9 @@ class ConciliadorComprasMeses
     public const DIFERENCIA = 'diferencia';
     public const SIN_PLAN   = 'sin_plan';
 
+    // Planes ya emparejados con otro renglón del mismo estado de cuenta
+    private array $usados = [];
+
     public function __construct(private Cuenta $cuenta)
     {
     }
@@ -34,8 +37,9 @@ class ConciliadorComprasMeses
         $numero = max((int) $renglon['numero_pago'], 1);
         $fecha  = Carbon::parse($renglon['fecha']);
 
-        [$compra, $avisos] = $this->buscarPlan($renglon['descripcion'], (float) $renglon['monto_original']);
+        [$compra, $avisos] = $this->buscarPlan($renglon);
         if ($compra) {
+            $this->usados[] = $compra->id;
             $avisos = array_merge($avisos, $this->verificar($compra, $renglon, $numero, $fecha));
             return $this->resultado($avisos ? self::DIFERENCIA : self::VERIFICADA, $renglon, $compra, $avisos, $compra->fecha_primer_cargo);
         }
@@ -112,13 +116,25 @@ class ConciliadorComprasMeses
     }
 
     /** @return array{0: ?CompraMeses, 1: array} el plan encontrado y avisos de la búsqueda */
-    private function buscarPlan(string $descripcion, float $monto): array
+    /**
+     * Varias compras pueden tener el mismo monto y descripción (p. ej. tres de
+     * Amazon por $1,199.98, unas a 6 y otra a 12 meses): se prefiere el plan con
+     * los mismos meses y mensualidad, y cada plan se empareja con un solo renglón.
+     */
+    private function buscarPlan(array $renglon): array
     {
-        $buscada = self::normalizar($descripcion);
+        $buscada = self::normalizar($renglon['descripcion']);
+        $monto   = (float) $renglon['monto_original'];
+        $meses   = (int) ($renglon['total_pagos'] ?? 0);
+        $pago    = isset($renglon['mensualidad']) ? (float) $renglon['mensualidad'] : null;
 
         $candidatas = CompraMeses::where('cuenta_id', $this->cuenta->id)
             ->whereBetween('monto_original', [$monto - 0.01, $monto + 0.01])
-            ->get();
+            ->whereNotIn('id', $this->usados)
+            ->orderBy('id')
+            ->get()
+            ->sortByDesc(fn ($compra) => ($meses && $compra->meses === $meses ? 2 : 0)
+                + ($pago !== null && abs((float) $compra->mensualidad - $pago) <= 0.01 ? 1 : 0));
 
         // El banco suele recortar la descripción: basta con que una contenga a la otra
         $porDescripcion = $candidatas->first(function ($compra) use ($buscada) {
