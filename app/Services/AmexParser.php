@@ -8,8 +8,9 @@ use Carbon\Carbon;
  * Lee el estado de cuenta en PDF de American Express.
  *
  * Toma los pagos, los cargos de cada tarjeta (titular y adicionales, en pesos y
- * en moneda extranjera), las comisiones con su IVA y la tabla de meses sin
- * intereses. Las mensualidades ("CARGO 06 DE 12") vienen mezcladas con los
+ * en moneda extranjera), las comisiones con su IVA, los cargos de planes de
+ * pagos diferidos con comisión (capital, comisión e IVA) y las tablas de planes:
+ * meses sin intereses y pagos diferidos con comisión, cada una con sus totales. Las mensualidades ("CARGO 06 DE 12") vienen mezcladas con los
  * cargos: se marcan para conciliarlas con su renglón de la tabla. De cada
  * número de tarjeta solo se conservan los últimos 4 dígitos.
  *
@@ -37,7 +38,7 @@ class AmexParser
         '/^Estado de Cuenta$/u', '/^P[áa]gina\s+\d+$/u', '/^N[úu]mero de Cuenta FechaSiguiente Fecha/u', '/^Tarjetahabiente\s/u',
         '/\d{2}-[A-Za-z]{3}-\d{4}\s+\d{2}-[A-Za-z]{3}-\d{4}\s*$/u', '/^Fecha y Detalle de las operaciones/u',
     ];
-    private const RUIDO_MSI = '/^(Fecha|Original|Monto|Tasa de|inter[ée]s|anual|Saldo|pendiente|N[úu]mero|de|Mensualidad|total a|pagar|Resumen de Planes de Pagos Diferidos.*)$/u';
+    private const RUIDO_MSI = '/^(Fecha|Original|Monto|Tasa de|inter[ée]s|anual|Saldo|pendiente|Pendiente|N[úu]mero|de|Mensualidad|total a|pagar|Diferido|Comisi[óo]n|Mensual\*|IVA\)|Resumen de Planes de Pagos Diferidos.*)$/u';
 
     private int $anioCorte;
     private int $mesCorte;
@@ -72,31 +73,41 @@ class AmexParser
             $errores[] = 'No se encontró el resumen del estado de cuenta (saldo anterior, pagos y créditos, nuevos cargos y saldo al corte).';
         }
         $resumen['comisiones'] = $this->importe('/Total de Comisiones del periodo:\s*\$\s*' . self::IMPORTE . '/u', $texto);
-        if (preg_match('/^Totales de Planes de Pagos Diferidos y Meses sin Intereses\s+' . self::IMPORTE . '\s+' . self::IMPORTE . '/mu', $texto, $m)) {
-            $resumen['msi_saldo']        = $this->aNumero($m[1]);
-            $resumen['msi_mensualidades'] = $this->aNumero($m[2]);
-        } else {
-            $resumen['msi_saldo'] = $resumen['msi_mensualidades'] = null;
+        // Cada tabla de planes trae sus totales y al final viene el gran total de ambas
+        $totales = [
+            'msi'      => '/Totales de Planes de Pagos Diferidos con Intereses y\s*Meses sin Intereses\s+' . self::IMPORTE . '\s+' . self::IMPORTE . '/u',
+            'comision' => '/Totales de Planes de Pagos Diferidos con Comisi[óo]n\s+' . self::IMPORTE . '\s+' . self::IMPORTE . '/u',
+            'planes'   => '/^Totales de Planes de Pagos Diferidos y Meses sin Intereses\s+' . self::IMPORTE . '\s+' . self::IMPORTE . '/mu',
+        ];
+        foreach ($totales as $clave => $patronTotal) {
+            $hay = preg_match($patronTotal, $texto, $m);
+            $resumen["{$clave}_saldo"]         = $hay ? $this->aNumero($m[1]) : null;
+            $resumen["{$clave}_mensualidades"] = $hay ? $this->aNumero($m[2]) : null;
         }
+        // Sin tabla con comisión, la de meses sin intereses puede traer solo el gran total
+        if ($resumen['msi_saldo'] === null && $resumen['comision_saldo'] === null) {
+            [$resumen['msi_saldo'], $resumen['msi_mensualidades']] = [$resumen['planes_saldo'], $resumen['planes_mensualidades']];
+        }
+        $resumen['plan_comision_cargos'] = $this->importe('/Total de cargos de Planes de Pagos Diferidos con Comisi[óo]n\s+' . self::IMPORTE . '/u', $texto);
 
         // Nunca se conserva el número completo de la tarjeta
         $ultimos4 = preg_match('/N[úu]mero de Cuenta:\s*([\d-]{15,})/u', $texto, $m) ? substr(preg_replace('/\D/', '', $m[1]), -4) : null;
 
         [$movimientos, $errores2] = $this->leerMovimientos($texto, $ultimos4);
-        [$msi, $errores3] = $this->leerMesesSinIntereses($texto);
+        [$msi, $planesComision, $errores3] = $this->leerTablasDePlanes($texto);
         $errores = array_merge($errores, $errores2, $errores3);
 
         if (!$errores) {
-            $errores = $this->validar($resumen, $movimientos, $msi);
+            $errores = $this->validar($resumen, $movimientos, $msi, $planesComision);
         }
         if (!$errores) {
             [$msi, $errores] = $this->emparejarMensualidades($movimientos, $msi);
         }
 
-        return $this->resultado($periodo, $ultimos4, $resumen, $movimientos, $msi, $errores);
+        return $this->resultado($periodo, $ultimos4, $resumen, $movimientos, $msi, $errores, $planesComision);
     }
 
-    private function resultado(?array $periodo, ?string $ultimos4, array $resumen, array $movimientos, array $msi, array $errores): array
+    private function resultado(?array $periodo, ?string $ultimos4, array $resumen, array $movimientos, array $msi, array $errores, array $planesComision = []): array
     {
         return [
             'tipo'           => 'tarjeta',
@@ -108,6 +119,7 @@ class AmexParser
             'resumen'        => $resumen,
             'movimientos'    => $movimientos,
             'msi'            => $msi,
+            'planes_comision' => $planesComision,
             'errores'        => $errores,
         ];
     }
@@ -167,8 +179,9 @@ class AmexParser
 
     /**
      * Recorre las secciones de movimientos: pagos (antes de la primera tarjeta),
-     * "Nuevos cargos y abonos de ..." de cada tarjeta y "Total de Cargos para ..."
-     * (comisiones e IVA). Un movimiento acumula fecha, descripción, mensualidad,
+     * "Nuevos cargos y abonos de ..." de cada tarjeta, "Total de Cargos para ..."
+     * (comisiones e IVA) y "Descripción de cargos de Planes de Pagos Diferidos con
+     * Comisión" (capital del plan, su comisión e IVA). Un movimiento acumula fecha, descripción, mensualidad,
      * moneda y referencia hasta su monto. En los saltos de página la fecha o la
      * referencia del último movimiento pueden salir al inicio de la página
      * siguiente: si un bloque no tiene descripción se completa con él el
@@ -234,6 +247,13 @@ class AmexParser
                 $tarjeta = null;
                 continue;
             }
+            if (preg_match('/^Descripci[óo]n de cargos de Planes de Pagos Diferidos con Comisi[óo]n/u', $linea)) {
+                $completarAnterior();
+                $seccion = 'plan_comision';
+                $inicioSeccion = count($movimientos);
+                $tarjeta = $titular;
+                continue;
+            }
             if (preg_match('/^Total de Cargos para/u', $linea)) {
                 $completarAnterior();
                 $seccion = 'comisiones';
@@ -247,7 +267,7 @@ class AmexParser
             }
 
             // Totales que cierran cada sección: se comparan con sus movimientos
-            if (preg_match('/^(Total de las transacciones en \$|Total de Cargos en Moneda Extranjera|Total de las transacciones y comisiones|Total de IVA sobre transacciones y comisiones)\D*?' . self::IMPORTE . '\s*$/u', $linea, $m)) {
+            if (preg_match('/^(Total de las transacciones en \$|Total de Cargos en Moneda Extranjera|Total de las transacciones y comisiones|Total de IVA sobre transacciones y comisiones|Total de cargos de Planes de Pagos Diferidos con Comisi[óo]n)\D*?' . self::IMPORTE . '\s*$/u', $linea, $m)) {
                 $completarAnterior();
                 $esIva = str_starts_with($m[1], 'Total de IVA');
                 $deSeccion = array_filter(array_slice($movimientos, $inicioSeccion), fn ($mov) => $seccion !== 'comisiones' || ($mov['clase'] === 'iva') === $esIva);
@@ -256,7 +276,7 @@ class AmexParser
                     $errores[] = "La suma de los movimientos ({$this->formato($suma)}) no coincide con \"{$m[1]}\""
                         . ($tarjeta ? " de la tarjeta ···{$tarjeta}" : '') . " del estado de cuenta (\${$m[2]}).";
                 }
-                if ($seccion === 'tarjeta') {
+                if (in_array($seccion, ['tarjeta', 'plan_comision'], true)) {
                     $seccion = 'fuera';
                 }
                 continue;
@@ -301,7 +321,7 @@ class AmexParser
                 $actual['referencia'] = preg_match('/\/REF(\S+)/u', $resto, $m) ? mb_substr($m[1], 0, 50) : null;
                 continue;
             }
-            if (preg_match('/^CARGO (\d{1,3}) DE (\d{1,3})$/u', $resto, $m)) {
+            if (preg_match('/^CARGO (\d{1,3}) DE\s*(\d{1,3})$/u', $resto, $m)) {
                 $actual['mensualidad'] = ['numero' => (int) $m[1], 'total' => (int) $m[2]];
                 continue;
             }
@@ -361,6 +381,12 @@ class AmexParser
 
         $clase = match (true) {
             $seccion === 'comisiones' => preg_match('/^IVA\b/u', $descripcion) ? 'iva' : 'comision',
+            // El capital del plan diferido es saldo anterior; la comisión y su IVA sí son gasto del periodo
+            $seccion === 'plan_comision' => match (true) {
+                (bool) preg_match('/^IVA\b/u', $descripcion) => 'iva',
+                (bool) preg_match('/^COMISI[ÓO]N/u', $descripcion) => 'comision',
+                default => 'plan_diferido',
+            },
             $bloque['mensualidad'] !== null => 'mensualidad',
             default => 'compra',
         };
@@ -388,38 +414,45 @@ class AmexParser
             'moneda'       => $bloque['moneda'],
             'monto_moneda' => $bloque['monto_moneda'],
             'mensualidad'  => $bloque['mensualidad'],
+            'plan_comision' => $seccion === 'plan_comision',
         ];
     }
 
     /**
-     * Tabla "Resumen de Planes de Pagos Diferidos ... y Meses sin Intereses". Cada
-     * compra: descripción (1 o 2 renglones), "Mensualidad=(...)", el desglose
+     * Tablas "Resumen de Planes de Pagos Diferidos con Intereses y Meses sin
+     * Intereses" y "Resumen de Planes de Pagos Diferidos con Comisión". Cada
+     * renglón: descripción (1 o 2 renglones), "Mensualidad=(...)", el desglose
      * "615.51=615.51+0.00+0.00" y el renglón de datos, donde los números salen
      * pegados ("1 deFeb 7,386.100.00%1,846.51 9 de12 615.51"). La mensualidad del
-     * desglose permite separar "8 de121,728.67".
+     * desglose permite separar "8 de121,728.67". Cada tabla termina en sus
+     * "Totales de Planes ..."; la de meses sin intereses puede seguir en otra página.
+     *
+     * @return array{0: array, 1: array, 2: array} meses sin intereses, planes con comisión y errores
      */
-    private function leerMesesSinIntereses(string $texto): array
+    private function leerTablasDePlanes(string $texto): array
     {
-        $msi = [];
+        $tablas  = ['msi' => [], 'comision' => []];
         $errores = [];
-        $dentro = false;
+        $tabla   = null;
         $descripcion = [];
         $mensualidad = null;
 
         foreach (preg_split('/\r\n|\n|\r/', $texto) as $linea) {
             $linea = trim($linea);
 
-            if (preg_match('/^Resumen de Planes de Pagos Diferidos/u', $linea)) {
-                $dentro = true;
+            if (preg_match('/^Resumen de Planes de Pagos Diferidos (con Comisi[óo]n|con Intereses)/u', $linea, $m)) {
+                $tabla = str_starts_with($m[1], 'con Comisi') ? 'comision' : 'msi';
                 continue;
             }
-            if (!$dentro) {
-                continue;
-            }
-            if (preg_match('/^Totales de Planes/u', $linea)) {
+            if (preg_match('/^Totales de Planes de Pagos Diferidos y Meses sin Intereses/u', $linea)) {
                 break;
             }
-            if ($linea === '' || $this->esRuido($linea) || preg_match(self::RUIDO_MSI, $linea) || str_starts_with($linea, 'Mensualidad=')) {
+            if (preg_match('/^Totales de Planes/u', $linea)) {
+                $tabla = null;
+                $descripcion = [];
+                continue;
+            }
+            if ($tabla === null || $linea === '' || $this->esRuido($linea) || preg_match(self::RUIDO_MSI, $linea) || str_starts_with($linea, 'Mensualidad=')) {
                 continue;
             }
 
@@ -430,13 +463,14 @@ class AmexParser
 
             if ($mensualidad && str_ends_with($linea, $mensualidad[1])) {
                 $datos = trim(substr($linea, 0, -strlen($mensualidad[1])));
-                $patron = '/^(\d{1,2})\s*de\s*([A-Za-z]{3})[a-z]*\s+' . self::IMPORTE . '([\d.]+)%\s*' . self::IMPORTE . '\s+(\d+)\s*de\s*(\d+)$/u';
+                $patron = '/^(\d{1,2})\s*de\s*([A-Za-z]{3})[a-z]*\s+' . self::IMPORTE . '\s*([\d.]+)%\s*' . self::IMPORTE . '\s+(\d+)\s*de\s*(\d+)$/u';
                 $nombre = preg_replace('/\s+/u', ' ', implode(' ', $descripcion));
+                $tipoTabla = $tabla === 'msi' ? 'meses sin intereses' : 'planes con comisión';
                 if (!preg_match($patron, $datos, $m)) {
-                    $errores[] = "No se pudo leer el renglón de meses sin intereses de \"{$nombre}\".";
+                    $errores[] = "No se pudo leer el renglón de {$tipoTabla} de \"{$nombre}\".";
                 } else {
                     $numero = (int) $m[6];
-                    $msi[] = [
+                    $renglon = [
                         'descripcion'     => $nombre,
                         'fecha_compra'    => $this->fechaCompra((int) $m[1], self::MESES_CORTOS[mb_strtoupper($m[2])] ?? 0, $numero),
                         'monto_original'  => $this->aNumero($m[3]),
@@ -445,11 +479,14 @@ class AmexParser
                         'numero_pago'     => $numero,
                         'total_pagos'     => (int) $m[7],
                         'pago_requerido'  => $this->aNumero($mensualidad[1]),
+                        // Desglose: capital (o monto diferido) + interés o comisión + IVA
+                        'capital'         => $this->aNumero($mensualidad[2]),
                         'interes'         => $this->aNumero($mensualidad[3]) + $this->aNumero($mensualidad[4]),
                     ];
-                    if (end($msi)['fecha_compra'] === null) {
-                        $errores[] = "Fecha de compra inválida en la compra a meses \"{$nombre}\".";
+                    if ($renglon['fecha_compra'] === null) {
+                        $errores[] = "Fecha inválida en el renglón de {$tipoTabla} \"{$nombre}\".";
                     }
+                    $tablas[$tabla][] = $renglon;
                 }
                 $descripcion = [];
                 $mensualidad = null;
@@ -459,7 +496,7 @@ class AmexParser
             $descripcion[] = $linea;
         }
 
-        return [$msi, $errores];
+        return [$tablas['msi'], $tablas['comision'], $errores];
     }
 
     /**
@@ -485,7 +522,7 @@ class AmexParser
         return ($centavos < 0 ? '-' : '') . '$' . number_format(abs($centavos) / 100, 2);
     }
 
-    private function validar(array $resumen, array $movimientos, array $msi): array
+    private function validar(array $resumen, array $movimientos, array $msi, array $planesComision = []): array
     {
         $errores  = [];
         $centavos = fn (?float $v) => (int) round(($v ?? 0) * 100);
@@ -526,6 +563,36 @@ class AmexParser
             }
             if ($mensualidades !== $tabla) {
                 $errores[] = "Las mensualidades cobradas en los movimientos ({$this->formato($mensualidades)}) no coinciden con la tabla de meses sin intereses ({$this->formato($tabla)}).";
+            }
+        }
+
+        // Planes con comisión: la tabla contra sus totales y lo cobrado en el periodo contra su mensualidad
+        $cobradoPlanes = array_sum(array_map(fn ($m) => $centavos($m['monto']), array_filter($movimientos, fn ($m) => $m['plan_comision'] ?? false)));
+        if ($planesComision || $cobradoPlanes || $resumen['comision_saldo'] !== null) {
+            $tabla  = array_sum(array_map(fn ($r) => $centavos($r['pago_requerido']), $planesComision));
+            $saldos = array_sum(array_map(fn ($r) => $centavos($r['saldo_pendiente']), $planesComision));
+            if ($resumen['comision_mensualidades'] === null) {
+                $errores[] = 'No se encontraron los totales de la tabla de planes de pagos diferidos con comisión.';
+            } else {
+                if ($tabla !== $centavos($resumen['comision_mensualidades'])) {
+                    $errores[] = "La suma de mensualidades de la tabla de planes con comisión ({$this->formato($tabla)}) no coincide con su total ({$this->formato($centavos($resumen['comision_mensualidades']))}).";
+                }
+                if ($saldos !== $centavos($resumen['comision_saldo'])) {
+                    $errores[] = "La suma de saldos pendientes de planes con comisión ({$this->formato($saldos)}) no coincide con su total ({$this->formato($centavos($resumen['comision_saldo']))}).";
+                }
+            }
+            if ($cobradoPlanes !== $tabla) {
+                $errores[] = "Los cargos de planes con comisión en los movimientos ({$this->formato($cobradoPlanes)}) no coinciden con la tabla de planes con comisión ({$this->formato($tabla)}).";
+            }
+        }
+
+        // El gran total de planes es la suma de las dos tablas
+        if ($resumen['planes_saldo'] !== null) {
+            foreach (['saldo' => 'saldos pendientes', 'mensualidades' => 'mensualidades'] as $campo => $nombre) {
+                $suma = $centavos($resumen["msi_{$campo}"]) + $centavos($resumen["comision_{$campo}"]);
+                if ($suma !== $centavos($resumen["planes_{$campo}"])) {
+                    $errores[] = "La suma de {$nombre} de las dos tablas de planes ({$this->formato($suma)}) no coincide con \"Totales de Planes de Pagos Diferidos y Meses sin Intereses\" ({$this->formato($centavos($resumen["planes_{$campo}"]))}).";
+                }
             }
         }
 

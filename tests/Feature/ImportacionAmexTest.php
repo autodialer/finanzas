@@ -115,6 +115,23 @@ class ImportacionAmexTest extends TestCase
             ->assertDontSee('no coincide con la tarjeta');
     }
 
+    public function test_plan_con_comision_capital_se_ignora_y_comision_con_iva_es_un_gasto(): void
+    {
+        $this->pdf->texto = AmexFixture::conPlanComision();
+        $this->subir()->assertRedirect(route('importacion-afirme.preview'));
+
+        $capital = $this->fila('PLAN DE PAGOS DIFERIDOS');
+        $this->assertSame(['ignorar', 1000.0, false], [$capital['tipo'], $capital['monto'], $capital['duplicado']]);
+        $this->assertStringContainsString('saldo anterior', $capital['motivo']);
+
+        $comision = $this->fila('Comisiones e intereses bancarios');
+        $this->assertSame(['gasto', 34.8, 4.8, $this->comisiones->id], [$comision['tipo'], $comision['monto'], $comision['monto_iva'], $comision['categoria_id']]);
+
+        // El plan con comisión no es una compra a meses
+        $this->assertCount(2, session('importacion_afirme.meses'));
+        $this->get(route('importacion-afirme.preview'))->assertOk()->assertSee('Planes de pagos diferidos con comisión');
+    }
+
     public function test_cuenta_que_no_es_amex_se_rechaza(): void
     {
         $this->subir($this->debito)->assertSessionHasErrors('archivo');

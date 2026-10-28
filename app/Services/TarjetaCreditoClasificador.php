@@ -17,8 +17,9 @@ use Carbon\Carbon;
  * meses (ConciliadorComprasMeses).
  *
  * De Amex además: comisión + IVA en un solo gasto, abonos que no son pagos →
- * ingreso, y las mensualidades cobradas ("CARGO 06 DE 12") se quitan de las
- * filas y se anota si ya se venían registrando como gasto cada mes.
+ * ingreso, el capital de un plan de pagos diferidos con comisión → ignorar (es
+ * saldo anterior, no gasto nuevo), y las mensualidades cobradas ("CARGO 06 DE
+ * 12") se quitan de las filas y se anota si ya se venían registrando como gasto.
  */
 class TarjetaCreditoClasificador
 {
@@ -56,10 +57,17 @@ class TarjetaCreditoClasificador
                 'tarjeta'     => $mov['tarjeta'] ?? null,
             ];
 
-            if ($clase === 'comision') {
+            if ($clase === 'plan_diferido') {
+                $filas[] = AfirmeClasificador::filaBase($base + [
+                    'naturaleza' => 'retiro',
+                    'concepto'   => $mov['descripcion'],
+                    'tipo'       => 'ignorar',
+                    'motivo'     => 'Capital del plan de pagos diferidos: es saldo anterior, no un gasto nuevo',
+                ]);
+            } elseif ($clase === 'comision') {
                 $filas[] = AfirmeClasificador::filaBase($base + [
                     'naturaleza'   => 'retiro',
-                    'concepto'     => $mov['descripcion'],
+                    'concepto'     => ($mov['plan_comision'] ?? false) ? 'Comisiones e intereses bancarios' : $mov['descripcion'],
                     'comercio'     => 'COMISIONES BANCARIAS',
                     'monto_iva'    => $mov['monto_iva'] ?? 0,
                     'categoria_id' => $this->categoriaComisionesId(),
@@ -145,6 +153,9 @@ class TarjetaCreditoClasificador
      */
     private function marcarDuplicado(array $fila): array
     {
+        if ($fila['tipo'] === 'ignorar') {
+            return $fila;
+        }
         if ($fila['tipo'] === 'traspaso') {
             $modelo = 'traspaso';
             $query  = Traspaso::where('cuenta_destino_id', $this->tarjeta->id)->whereBetween('fecha', $this->rango($fila['fecha'], $fila['fecha'], self::DIAS_TOLERANCIA_PAGO));

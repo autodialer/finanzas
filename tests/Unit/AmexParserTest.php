@@ -40,6 +40,8 @@ class AmexParserTest extends TestCase
         $this->assertSame([
             'saldo_anterior' => 5050.0, 'pagos_abonos' => 5050.0, 'nuevos_cargos' => 28939.5, 'saldo_corte' => 28939.5,
             'comisiones' => 1000.0, 'msi_saldo' => 2350.0, 'msi_mensualidades' => 550.0,
+            'comision_saldo' => null, 'comision_mensualidades' => null, 'planes_saldo' => 2350.0, 'planes_mensualidades' => 550.0,
+            'plan_comision_cargos' => null,
         ], $estado['resumen']);
         $this->assertSame('1111', $estado['ultimos4']);
         $this->assertSame(['1111', '2222'], $estado['tarjetas']);
@@ -132,6 +134,59 @@ class AmexParserTest extends TestCase
         ], array_intersect_key($msi[0], array_flip(['descripcion', 'fecha_compra', 'monto_original', 'saldo_pendiente', 'numero_pago', 'total_pagos', 'pago_requerido', 'fecha', 'tarjeta', 'referencia'])));
         // Compra de diciembre en un corte de enero: año anterior
         $this->assertSame(['2025-12-20', 1, 3], [$msi[1]['fecha_compra'], $msi[1]['numero_pago'], $msi[1]['total_pagos']]);
+    }
+
+    public function test_plan_de_pagos_diferidos_con_comision(): void
+    {
+        $estado = (new AmexParser())->parsearTexto(AmexFixture::conPlanComision());
+
+        $this->assertSame([], $estado['errores']);
+        $this->assertSame(29974.3, $estado['resumen']['nuevos_cargos']);
+        $this->assertSame(1034.8, $estado['resumen']['plan_comision_cargos']);
+
+        $plan = collect($estado['movimientos'])->where('plan_comision', true)->values();
+        $this->assertSame(
+            [['plan_diferido', 1000.0], ['comision', 30.0], ['iva', 4.8]],
+            $plan->map(fn ($m) => [$m['clase'], $m['monto']])->all()
+        );
+        // "CARGO 02 DE06" sin espacio: es el capital del plan, no una mensualidad de meses sin intereses
+        $this->assertSame(['numero' => 2, 'total' => 6], $plan[0]['mensualidad']);
+        $this->assertCount(2, $estado['msi']);
+
+        $this->assertSame([
+            'descripcion' => 'PLAN DE PAGOS DIFERIDOS', 'fecha_compra' => '2025-11-10', 'monto_original' => 6000.0, 'tasa' => 0.5,
+            'saldo_pendiente' => 4000.0, 'numero_pago' => 2, 'total_pagos' => 6, 'pago_requerido' => 1034.8, 'capital' => 1000.0, 'interes' => 34.8,
+        ], $estado['planes_comision'][0]);
+    }
+
+    public function test_cada_tabla_de_planes_se_valida_contra_su_total(): void
+    {
+        $estado = (new AmexParser())->parsearTexto(AmexFixture::conPlanComision());
+        $this->assertSame(
+            [2350.0, 550.0, 4000.0, 1034.8, 6350.0, 1584.8],
+            array_values(array_intersect_key($estado['resumen'], array_flip(['msi_saldo', 'msi_mensualidades', 'comision_saldo', 'comision_mensualidades', 'planes_saldo', 'planes_mensualidades'])))
+        );
+
+        // La tabla con comisión no cuadra con su propio total
+        $errores = implode(' ', (new AmexParser())->parsearTexto(AmexFixture::conPlanComision([
+            "Totales de Planes de Pagos Diferidos con Comisión\t4,000.00\t1,034.80" => "Totales de Planes de Pagos Diferidos con Comisión\t4,000.00\t1,000.00",
+        ]))['errores']);
+        $this->assertStringContainsString('tabla de planes con comisión ($1,034.80) no coincide con su total ($1,000.00)', $errores);
+        $this->assertStringNotContainsString('tabla de meses sin intereses', $errores);
+
+        // Cada tabla cuadra, pero el gran total no es su suma
+        $errores = implode(' ', (new AmexParser())->parsearTexto(AmexFixture::conPlanComision([
+            "Meses sin Intereses\t6,350.00\t1,584.80" => "Meses sin Intereses\t6,350.00\t1,600.00",
+        ]))['errores']);
+        $this->assertStringContainsString('La suma de mensualidades de las dos tablas de planes ($1,584.80)', $errores);
+    }
+
+    public function test_no_cuadra_si_falta_el_cargo_del_plan_con_comision(): void
+    {
+        $errores = implode(' ', (new AmexParser())->parsearTexto(AmexFixture::conPlanComision(["CARGO 02 DE06\n1,000.00\n" => "CARGO 02 DE06\n"]))['errores']);
+
+        $this->assertStringContainsString('Total de cargos de Planes de Pagos Diferidos con Comisión', $errores);
+        $this->assertStringNotContainsString('Total de las transacciones en $', $errores);
     }
 
     public function test_no_cuadra_si_falta_un_cargo(): void

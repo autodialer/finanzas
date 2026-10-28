@@ -134,4 +134,42 @@ class AmexFixture
 
         return strtr(implode("\n", $lineas), $reemplazos);
     }
+
+    /**
+     * Igual que texto(), más un plan de pagos diferidos con comisión: su sección
+     * de cargos (capital 1,000.00 "CARGO 02 DE06" + comisión 30.00 + IVA 4.80) y
+     * su tabla de planes. Cuadra: 5,050.00 − 5,050.00 + 29,974.30 = 29,974.30;
+     * planes: 2,350.00 + 4,000.00 = 6,350.00 y 550.00 + 1,034.80 = 1,584.80.
+     */
+    public static function conPlanComision(array $reemplazos = []): string
+    {
+        $seccionPlan = implode("\n", [
+            'Descripción de cargos de Planes de Pagos Diferidos con Comisión',
+            '22 deEneroPLAN DE PAGOS DIFERIDOS',
+            'CARGO 02 DE06',
+            '1,000.00',
+            "22 deEneroCOMISIÓN POR PLAN DE PAGOS DIFERIDOS\t30.00",
+            "22 deEneroIVA APLICABLE\t4.80",
+            "Total de cargos de Planes de Pagos Diferidos con Comisión\t1,034.80  ",
+        ]);
+        $tablaPlan = implode("\n", [
+            'Resumen de Planes de Pagos Diferidos con Comisión',
+            'Fecha', 'Original', 'Monto', 'Diferido', 'Comisión', 'Mensual*', 'Saldo', 'Pendiente', 'Número', 'de', 'Mensualidad', 'Monto', 'total a', 'pagar',
+            'PLAN DE PAGOS DIFERIDOS',
+            'Mensualidad=(Monto Diferido + Comisión +',
+            'IVA)',
+            '1,034.80=1,000.00+30.00+4.80',
+            '10 deNov 6,000.00 0.50%4,000.00 2 de61,034.80',
+            "Totales de Planes de Pagos Diferidos con Comisión\t4,000.00\t1,034.80",
+            '*Comisión equivalente al importe que resulte de aplicar el porcentaje señalado sobre el Monto Diferido.',
+        ]);
+
+        $texto = strtr(self::texto(), [
+            '5,050.00- 5,050.00+ 28,939.50= 28,939.50 28,939.50' => '5,050.00- 5,050.00+ 29,974.30= 29,974.30 29,974.30',
+            "Total de IVA sobre transacciones y comisiones\t160.00  " => "Total de IVA sobre transacciones y comisiones\t160.00  \n" . $seccionPlan,
+            "Totales de Planes de Pagos Diferidos y Meses sin Intereses\t2,350.00\t550.00" => $tablaPlan . "\nTotales de Planes de Pagos Diferidos y Meses sin Intereses\t6,350.00\t1,584.80",
+        ]);
+
+        return strtr($texto, $reemplazos);
+    }
 }

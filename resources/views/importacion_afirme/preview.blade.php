@@ -71,6 +71,10 @@
                         <tr class="text-muted"><td>Mensualidades a meses (incluidas en nuevos cargos)</td><td class="text-end">${{ number_format($estado['resumen']['msi_mensualidades'], 2) }}</td></tr>
                         <tr class="text-muted"><td>Saldo pendiente a meses</td><td class="text-end">${{ number_format($estado['resumen']['msi_saldo'], 2) }}</td></tr>
                     @endif
+                    @if(($estado['resumen']['comision_mensualidades'] ?? null) !== null)
+                        <tr class="text-muted"><td>Planes de pagos diferidos con comisión (mensualidad incluida en nuevos cargos)</td><td class="text-end">${{ number_format($estado['resumen']['comision_mensualidades'], 2) }}</td></tr>
+                        <tr class="text-muted"><td>Saldo pendiente de planes con comisión</td><td class="text-end">${{ number_format($estado['resumen']['comision_saldo'], 2) }}</td></tr>
+                    @endif
                 </table>
                 @elseif($esTarjeta)
                 <table class="table table-sm mb-0">
