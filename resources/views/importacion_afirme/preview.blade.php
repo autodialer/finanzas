@@ -8,7 +8,7 @@
     $esTarjeta = $estado['tipo'] === 'tarjeta';
 @endphp
 
-@section('titulo', 'Vista Previa — ' . ($esAmex ? 'American Express' : 'Afirme'))
+@section('titulo', 'Vista Previa — ' . ($esAmex ? 'American Express' : 'Estado de cuenta'))
 
 @section('contenido')
 <div class="d-flex justify-content-between align-items-center mb-3">

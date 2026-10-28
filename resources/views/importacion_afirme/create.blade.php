@@ -62,7 +62,7 @@
             </div>
             <div class="card-body small">
                 <ul class="mb-0">
-                    <li>Acepta el estado de cuenta de Afirme (<strong>Cuenta Visión</strong> o <strong>tarjeta de crédito</strong>) o de <strong>American Express</strong>; el tipo se detecta solo.</li>
+                    <li>Acepta el estado de cuenta Afirme (<strong>Cuenta Visión</strong> o <strong>tarjeta de crédito</strong>), el de la <strong>tarjeta de crédito Banregio</strong> y el de <strong>American Express</strong>; el tipo se detecta solo.</li>
                     <li>Antes de continuar se verifica que los movimientos cuadren con el resumen del estado de cuenta. Si no cuadra, no se importa.</li>
                     <li>Verás una vista previa con un tipo sugerido para cada movimiento. Nada se guarda hasta que confirmes.</li>
                     <li>Los movimientos ya importados (misma fecha, referencia y monto) se marcan para no duplicarlos.</li>

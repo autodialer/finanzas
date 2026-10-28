@@ -10,8 +10,8 @@ use App\Models\Traspaso;
 use Carbon\Carbon;
 
 /**
- * Convierte los movimientos de una tarjeta de crédito (Afirme o American
- * Express) en filas para la vista previa: cargos → gasto, pagos → traspaso
+ * Convierte los movimientos de una tarjeta de crédito (Afirme, Banregio o
+ * American Express) en filas para la vista previa: cargos → gasto, pagos → traspaso
  * desde la cuenta con la que se paga la tarjeta. Los meses sin intereses no
  * son movimientos: se regresan aparte para conciliarlos con las compras a
  * meses (ConciliadorComprasMeses).
@@ -38,7 +38,6 @@ class TarjetaCreditoClasificador
     public function clasificar(array $estado): array
     {
         $this->esAmex = ($estado['banco'] ?? 'afirme') === 'amex';
-        $nombreBanco  = $this->esAmex ? 'American Express' : 'Afirme';
         $filas = [];
 
         foreach ($this->agruparComisiones($estado['movimientos']) as $mov) {
@@ -82,10 +81,10 @@ class TarjetaCreditoClasificador
                     'motivo'     => 'Abono a la tarjeta (devolución o bonificación)',
                 ]);
             } else {
-                $esPago = $clase === 'pago' || str_starts_with($mov['comercio'], 'PAGO');
+                $esPago = $clase === 'pago' || str_contains($mov['comercio'], 'PAGO');
                 $filas[] = AfirmeClasificador::filaBase($base + [
                     'naturaleza'        => 'deposito',
-                    'concepto'          => $esPago ? "Pago a tarjeta {$nombreBanco}" : $mov['comercio'],
+                    'concepto'          => $esPago ? trim('Pago a tarjeta ' . ($this->tarjeta->banco->nombre ?? '')) : $mov['comercio'],
                     'tipo'              => 'traspaso',
                     'motivo'            => 'Abono a la tarjeta',
                     'cuenta_destino_id' => $this->cuentaOrigenPagos(),

@@ -13,6 +13,7 @@ use App\Services\AfirmeClasificador;
 use App\Services\AfirmeEstadoCuentaParser;
 use App\Services\AfirmeTarjetaParser;
 use App\Services\AmexParser;
+use App\Services\BanregioTarjetaParser;
 use App\Services\ConciliadorComprasMeses;
 use App\Services\PdfTexto;
 use App\Services\SugeridorCategoria;
@@ -21,8 +22,8 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
-// Importa estados de cuenta en PDF de Afirme (Cuenta Visión o tarjeta de crédito) y de American Express:
-// subir → vista previa → confirmar. El tipo de estado de cuenta se detecta por su contenido.
+// Importa estados de cuenta en PDF de Afirme (Cuenta Visión o tarjeta de crédito), de la tarjeta de crédito
+// Banregio y de American Express: subir → vista previa → confirmar. El tipo se detecta por su contenido.
 class ImportacionAfirmeController extends Controller
 {
     private const SESION = 'importacion_afirme';
@@ -53,18 +54,20 @@ class ImportacionAfirmeController extends Controller
             return back()->withInput()->withErrors(['archivo' => 'No se pudo leer el PDF: ' . $e->getMessage()]);
         }
 
-        // El tipo de estado de cuenta se reconoce por su contenido
+        // El tipo de estado de cuenta se reconoce por su contenido (Banregio antes que Afirme: también dice "tarjeta de crédito")
         if (AmexParser::reconoce($texto)) {
             if (!$this->esAmex($cuenta)) {
                 return back()->withInput()->withErrors(['archivo' => "El PDF es un estado de cuenta American Express y la cuenta elegida ({$cuenta->nombre}) no es de American Express."]);
             }
             $estado = (new AmexParser())->parsearTexto($texto);
+        } elseif (BanregioTarjetaParser::reconoce($texto)) {
+            $estado = (new BanregioTarjetaParser())->parsearTexto($texto);
         } elseif (AfirmeTarjetaParser::reconoce($texto)) {
             $estado = (new AfirmeTarjetaParser())->parsearTexto($texto);
         } elseif (AfirmeEstadoCuentaParser::reconoce($texto)) {
             $estado = (new AfirmeEstadoCuentaParser())->parsearTexto($texto);
         } else {
-            return back()->withInput()->withErrors(['archivo' => 'El PDF no es un estado de cuenta reconocido (Afirme Cuenta Visión, tarjeta de crédito Afirme o American Express).']);
+            return back()->withInput()->withErrors(['archivo' => 'El PDF no es un estado de cuenta reconocido (Afirme Cuenta Visión, tarjeta de crédito Afirme, tarjeta de crédito Banregio o American Express).']);
         }
 
         if ($estado['errores']) {
@@ -194,9 +197,7 @@ class ImportacionAfirmeController extends Controller
         if ($mensualidades) {
             $resumen .= ', ' . count($mensualidades) . ' mensualidades como gasto';
         }
-        $banco = ($importacion['estado']['banco'] ?? null) === 'amex' ? 'American Express' : 'Afirme';
-
-        return redirect()->route('gastos.index')->with('exito', "Estado de cuenta {$banco} importado: {$resumen}.");
+        return redirect()->route('gastos.index')->with('exito', 'Estado de cuenta ' . ($cuenta->banco->nombre ?? '') . " importado: {$resumen}.");
     }
 
     public function cancelar()
@@ -370,7 +371,9 @@ class ImportacionAfirmeController extends Controller
     {
         return $this->aplicarFiltroNegocio(Cuenta::with('negocio', 'banco'))
             ->where('tipo', 'banco')
-            ->whereHas('banco', fn ($q) => $q->where('nombre', 'like', '%afirme%')->orWhere('nombre', 'like', '%american express%'))
+            ->whereHas('banco', fn ($q) => $q->where('nombre', 'like', '%afirme%')
+                ->orWhere('nombre', 'like', '%banregio%')
+                ->orWhere('nombre', 'like', '%american express%'))
             ->orderBy('nombre')
             ->get();
     }

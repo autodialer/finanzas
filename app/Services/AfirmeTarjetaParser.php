@@ -63,6 +63,9 @@ class AfirmeTarjetaParser
             'cargos_meses'      => $this->importe('/Cargos y compras a meses \(capital\)\s*(?:\d+\s+)?\+\s*' . self::IMPORTE . '/u', $texto),
             'pagos_abonos'      => $this->importe('/Pagos y abonos\s*-\s*' . self::IMPORTE . '/u', $texto),
             'pago_no_intereses' => $this->importe('/PAGO PARA NO GENERAR INTERESES\s*=\s*' . self::IMPORTE . '/u', $texto),
+            'intereses'         => $this->importe('/Monto de intereses\s*(?:\d+\s*)?\+\s*' . self::IMPORTE . '/u', $texto) ?? 0,
+            'comisiones'        => $this->importe('/Monto de comisiones\s*\+\s*' . self::IMPORTE . '/u', $texto) ?? 0,
+            'iva'               => $this->importe('/IVA de intereses y comisiones\s*\+\s*' . self::IMPORTE . '/u', $texto) ?? 0,
         ];
         if ($resumen['cargos_regulares'] === null) {
             $errores[] = 'No se encontró "Cargos regulares (no a meses)" en el resumen del estado de cuenta.';
@@ -238,8 +241,17 @@ class AfirmeTarjetaParser
             $mov['naturaleza'] === 'cargo' ? $cargos += $centavos($mov['monto']) : $abonos += $centavos($mov['monto']);
         }
 
-        if ($cargos !== $centavos($resumen['cargos_regulares'])) {
-            $errores[] = "La suma de cargos ({$formato($cargos)}) no coincide con \"Cargos regulares (no a meses)\" del estado de cuenta ({$formato($centavos($resumen['cargos_regulares']))}).";
+        $esperado = $centavos($resumen['cargos_regulares'])
+                  + $centavos($resumen['intereses'])
+                  + $centavos($resumen['comisiones'])
+                  + $centavos($resumen['iva']);
+
+        if ($cargos !== $esperado) {
+            $errores[] = "La suma de cargos ({$formato($cargos)}) no coincide con el estado de cuenta ({$formato($esperado)}): "
+                       . "cargos regulares {$formato($centavos($resumen['cargos_regulares']))}"
+                       . " + intereses {$formato($centavos($resumen['intereses']))}"
+                       . " + comisiones {$formato($centavos($resumen['comisiones']))}"
+                       . " + IVA {$formato($centavos($resumen['iva']))}.";
         }
         if ($abonos !== $centavos($resumen['pagos_abonos'])) {
             $errores[] = "La suma de abonos ({$formato($abonos)}) no coincide con \"Pagos y abonos\" del estado de cuenta ({$formato($centavos($resumen['pagos_abonos']))}).";
