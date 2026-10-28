@@ -129,6 +129,41 @@ class ImportacionAfirmeTest extends TestCase
         $this->assertSame(1, collect($filas)->where('duplicado', true)->count());
     }
 
+    public function test_pago_amex_ya_registrado_como_traspaso_sin_referencia_es_duplicado(): void
+    {
+        // Creado al importar el estado de cuenta Amex (sin referencia), dos días después
+        Traspaso::create(['fecha' => '2026-03-08', 'cuenta_origen_id' => $this->cuenta->id, 'cuenta_destino_id' => $this->amex->id, 'monto' => 5000]);
+
+        $filas = $this->filas();
+
+        $this->assertTrue($filas[3]['duplicado']);
+        $this->assertSame('ignorar', $filas[3]['tipo']);
+        $this->assertStringContainsString('traspaso a American Express', $filas[3]['motivo']);
+        $this->assertSame(1, collect($filas)->where('duplicado', true)->count());
+    }
+
+    public function test_pago_amex_no_se_confunde_con_otro_traspaso(): void
+    {
+        $otra = Cuenta::create(['negocio_id' => $this->cuenta->negocio_id, 'banco_id' => $this->cuenta->banco_id, 'tipo' => 'banco', 'nombre' => 'Otra Ficticia']);
+        // Mismo monto, pero a otra cuenta; o a Amex fuera de los ±5 días
+        Traspaso::create(['fecha' => '2026-03-06', 'cuenta_origen_id' => $this->cuenta->id, 'cuenta_destino_id' => $otra->id, 'monto' => 5000]);
+        Traspaso::create(['fecha' => '2026-03-20', 'cuenta_origen_id' => $this->cuenta->id, 'cuenta_destino_id' => $this->amex->id, 'monto' => 5000]);
+
+        $this->assertFalse($this->filas()[3]['duplicado']);
+    }
+
+    public function test_pagos_amex_del_dia_que_suman_un_traspaso_capturado_son_duplicados(): void
+    {
+        Traspaso::create(['fecha' => '2026-07-06', 'cuenta_origen_id' => $this->cuenta->id, 'cuenta_destino_id' => $this->amex->id, 'monto' => 123860.40, 'concepto' => 'Pago American Express']);
+
+        $domi = fn (float $monto, string $ref) => ['fecha' => '2026-07-06', 'naturaleza' => 'retiro', 'referencia' => $ref, 'monto' => $monto,
+            'descripcion' => "DOMI-AMERICAN EXPRESS CO MEXICO SA DE CV W000000000{$ref}"];
+        $filas = (new AfirmeClasificador($this->cuenta))->clasificar([$domi(49900, '001'), $domi(49800, '002'), $domi(24160.40, '003')]);
+
+        $this->assertSame([true, true, true], array_column($filas, 'duplicado'));
+        $this->assertStringContainsString('los 3 pagos del día suman', $filas[0]['motivo']);
+    }
+
     public function test_vista_previa_no_guarda_nada(): void
     {
         $this->subirPdf()->assertRedirect(route('importacion-afirme.preview'));

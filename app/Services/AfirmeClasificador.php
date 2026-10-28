@@ -8,6 +8,7 @@ use App\Models\Gasto;
 use App\Models\Ingreso;
 use App\Models\Prestamo;
 use App\Models\Traspaso;
+use Carbon\Carbon;
 
 /**
  * Convierte los movimientos de un estado de cuenta Afirme en filas para la
@@ -21,6 +22,8 @@ class AfirmeClasificador
     private const PATRON_COMISION     = '/^(TRANSFERENCIA - ENVIO|COMISION|ADMINISTRACION DE ESQUEMA DE SEGURIDAD)/u';
     private const PATRON_IVA          = '/^IVA\b/u';
     private const PATRON_DEVOLUCION_COMISION = '/^(COMISION|IVA COMISION)/u';
+    // Tolerancia para reconocer un pago a Amex que ya se registró como traspaso (igual que desde la tarjeta)
+    private const DIAS_TOLERANCIA_PAGO_AMEX = 5;
 
     public function __construct(private Cuenta $cuenta)
     {
@@ -61,6 +64,7 @@ class AfirmeClasificador
             if ($esRetiro && str_starts_with($desc, 'DOMI-AMERICAN EXPRESS')) {
                 $filas[$i] = array_merge($this->fila([$mov], 'traspaso', 'Pago de tarjeta American Express'), [
                     'cuenta_destino_id' => $this->cuentaAmexId(),
+                    'pago_amex'         => true,
                 ]);
                 continue;
             }
@@ -82,7 +86,7 @@ class AfirmeClasificador
         ksort($filas);
         $filas = array_values($filas);
 
-        return $this->marcarDuplicados($filas);
+        return $this->marcarPagosAmexRegistrados($this->marcarDuplicados($filas));
     }
 
     /**
@@ -258,6 +262,58 @@ class AfirmeClasificador
         return $filas;
     }
 
+    /**
+     * Un pago "DOMI-AMERICAN EXPRESS" puede existir ya como traspaso sin
+     * referencia: creado al importar el estado de cuenta Amex o capturado a mano.
+     * Coincide por monto en ±5 días o, si se capturó un solo traspaso por el
+     * total, por la suma de los pagos del mismo día. Cada traspaso marca una vez.
+     */
+    private function marcarPagosAmexRegistrados(array $filas): array
+    {
+        $usados = [];
+        $buscar = function (string $fecha, float $monto) use (&$usados) {
+            $id = Traspaso::where('cuenta_origen_id', $this->cuenta->id)
+                ->whereIn('cuenta_destino_id', $this->cuentasAmexIds())
+                ->where(fn ($q) => $q->whereNull('referencia')->orWhere('referencia', ''))
+                ->whereBetween('fecha', [
+                    Carbon::parse($fecha)->subDays(self::DIAS_TOLERANCIA_PAGO_AMEX)->toDateString(),
+                    Carbon::parse($fecha)->addDays(self::DIAS_TOLERANCIA_PAGO_AMEX)->toDateString(),
+                ])
+                ->where('monto', round($monto, 2))
+                ->whereNotIn('id', $usados)
+                ->orderBy('fecha')
+                ->value('id');
+            if ($id !== null) {
+                $usados[] = $id;
+            }
+            return $id;
+        };
+        $marcar = fn (array $fila, string $motivo) => array_merge($fila, ['duplicado' => true, 'tipo' => 'ignorar', 'motivo' => $motivo]);
+        $pendientes = fn (array $filas) => array_keys(array_filter($filas, fn ($f) => ($f['pago_amex'] ?? false) && !$f['duplicado']));
+
+        foreach ($pendientes($filas) as $i) {
+            if ($buscar($filas[$i]['fecha'], $filas[$i]['monto'])) {
+                $filas[$i] = $marcar($filas[$i], 'Ya registrado: traspaso a American Express por el mismo monto (±' . self::DIAS_TOLERANCIA_PAGO_AMEX . ' días)');
+            }
+        }
+
+        $porDia = [];
+        foreach ($pendientes($filas) as $i) {
+            $porDia[$filas[$i]['fecha']][] = $i;
+        }
+        foreach ($porDia as $fecha => $indices) {
+            $suma = round(array_sum(array_map(fn ($i) => $filas[$i]['monto'], $indices)), 2);
+            if (count($indices) < 2 || !$buscar($fecha, $suma)) {
+                continue;
+            }
+            foreach ($indices as $i) {
+                $filas[$i] = $marcar($filas[$i], 'Ya registrado: los ' . count($indices) . ' pagos del día suman un traspaso a American Express por $' . number_format($suma, 2));
+            }
+        }
+
+        return $filas;
+    }
+
     private function contarExistentes(array $fila): int
     {
         $filtro = function ($query) use ($fila) {
@@ -281,6 +337,11 @@ class AfirmeClasificador
             ->orderByRaw('negocio_id = ? desc', [$this->cuenta->negocio_id])
             ->orderBy('id')
             ->value('id'));
+    }
+
+    private function cuentasAmexIds(): array
+    {
+        return once(fn () => Cuenta::whereHas('banco', fn ($q) => $q->where('nombre', 'like', '%american express%'))->pluck('id')->all());
     }
 
     private function prestamoId(): ?int
