@@ -7,7 +7,12 @@ use App\Models\ReglaCategoria;
 
 /**
  * Sugiere la categoría de cada fila importada: primero por la regla aprendida
- * del comercio (lo que se eligió la última vez) y, si no hay, por palabra clave.
+ * del comercio (lo que se eligió la última vez, o lo aprendido de gastos
+ * históricos con categorias:aprender-historial) y, si no hay, por palabra clave.
+ *
+ * Una regla aprendida de un concepto histórico puede traer la ciudad pegada
+ * ("UBER TRIP HTTPS HELP UB"): si no hay regla exacta, vale una que empiece
+ * con el comercio completo.
  *
  * Las categorías de las palabras clave que todavía no existen se proponen
  * como "nueva:<nombre>" y se crean solo al confirmar la importación.
@@ -33,11 +38,13 @@ class SugeridorCategoria
 
     public function sugerir(array $filas): array
     {
-        $reglas = ReglaCategoria::all()->keyBy(fn ($r) => $r->tipo . '|' . $r->comercio);
+        $reglas  = ReglaCategoria::all();
+        $exactas = $reglas->keyBy(fn ($r) => $r->tipo . '|' . $r->comercio);
 
         foreach ($filas as &$fila) {
             $tipo  = self::tipoRegla($fila);
-            $regla = $reglas[$tipo . '|' . ReglaCategoria::normalizar($fila['comercio'] ?? '')] ?? null;
+            $clave = ReglaCategoria::normalizar($fila['comercio'] ?? '');
+            $regla = $exactas[$tipo . '|' . $clave] ?? $this->porPrefijo($reglas, $tipo, $clave);
 
             if ($regla && ($fila['comercio'] ?? '') !== '') {
                 $fila['categoria_id'] = $regla->categoria_id;
@@ -50,6 +57,27 @@ class SugeridorCategoria
         unset($fila);
 
         return $filas;
+    }
+
+    /**
+     * Reglas que empiezan con el comercio (palabra completa). Si son varias, la
+     * categoría más repetida; en empate, la regla más corta (la más parecida).
+     */
+    private function porPrefijo($reglas, string $tipo, string $clave): ?ReglaCategoria
+    {
+        if (mb_strlen($clave) < 4) {
+            return null;
+        }
+
+        $candidatas = $reglas->filter(fn ($r) => $r->tipo === $tipo && str_starts_with($r->comercio, $clave . ' '))
+            ->sortBy(fn ($r) => mb_strlen($r->comercio));
+        if ($candidatas->isEmpty()) {
+            return null;
+        }
+
+        $votos = $candidatas->countBy('categoria_id');
+        $maximo = $votos->max();
+        return $candidatas->first(fn ($r) => $votos[$r->categoria_id] === $maximo);
     }
 
     public function porPalabraClave(string $comercio): ?string
