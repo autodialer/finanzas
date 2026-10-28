@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('titulo', 'Vista Previa — Afirme')
+@section('titulo', 'Vista Previa — Estado de cuenta')
 
 @php
     $etiquetasTipo = ['gasto' => 'Gasto', 'ingreso' => 'Ingreso', 'traspaso' => 'Traspaso', 'prestamo' => 'Préstamo', 'ignorar' => 'Ignorar'];

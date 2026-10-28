@@ -47,7 +47,7 @@ class AfirmeTarjetaClasificador
                 ])
                 : AfirmeClasificador::filaBase($base + [
                     'naturaleza'        => 'deposito',
-                    'concepto'          => str_starts_with($mov['comercio'], 'PAGO') ? 'Pago a tarjeta Afirme' : $mov['comercio'],
+                    'concepto'          => str_contains($mov['comercio'], 'PAGO') ? trim('Pago a tarjeta ' . ($this->tarjeta->banco->nombre ?? '')) : $mov['comercio'],
                     'tipo'              => 'traspaso',
                     'motivo'            => 'Abono a la tarjeta',
                     'cuenta_destino_id' => $this->cuentaOrigenPagos(),
