@@ -14,6 +14,7 @@ use App\Models\Traspaso;
 use App\Models\User;
 use App\Services\AfirmeClasificador;
 use App\Services\AfirmeEstadoCuentaParser;
+use App\Services\PdfTexto;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Tests\Fixtures\AfirmeFixture;
@@ -48,10 +49,10 @@ class ImportacionAfirmeTest extends TestCase
         $this->otrosGastos   = Categoria::create(['nombre' => 'Otros gastos', 'tipo' => 'gasto']);
         $this->otrosIngresos = Categoria::create(['nombre' => 'Otros ingresos', 'tipo' => 'ingreso']);
 
-        // El parser lee el texto ficticio en lugar de un PDF real
-        $this->app->instance(AfirmeEstadoCuentaParser::class, new class extends AfirmeEstadoCuentaParser {
+        // Se lee el texto ficticio en lugar de un PDF real
+        $this->app->instance(PdfTexto::class, new class extends PdfTexto {
             public string $texto = '';
-            public function extraerTexto(string $ruta): string
+            public function extraer(string $ruta): string
             {
                 return $this->texto ?: AfirmeFixture::texto();
             }
@@ -143,7 +144,7 @@ class ImportacionAfirmeTest extends TestCase
 
     public function test_no_permite_importar_si_no_cuadra(): void
     {
-        $this->app->make(AfirmeEstadoCuentaParser::class)->texto = AfirmeFixture::texto(["Saldo al corte\t$ 50,468.68" => "Saldo al corte\t$ 1.00"]);
+        $this->app->make(PdfTexto::class)->texto = AfirmeFixture::texto(["Saldo al corte\t$ 50,468.68" => "Saldo al corte\t$ 1.00"]);
 
         $this->subirPdf()->assertRedirect()->assertSessionHasErrors('archivo');
         $this->assertNull(session('importacion_afirme'));

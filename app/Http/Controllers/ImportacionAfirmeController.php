@@ -14,15 +14,20 @@ use App\Services\AfirmeEstadoCuentaParser;
 use App\Services\AfirmeTarjetaClasificador;
 use App\Services\AfirmeTarjetaParser;
 use App\Services\ConciliadorComprasMeses;
+use App\Services\PdfTexto;
+use App\Services\SugeridorCategoria;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
-// Importa el estado de cuenta en PDF de Afirme: subir → vista previa → confirmar.
-// Cuenta Visión: todos los movimientos. Tarjeta de crédito: compras a meses y cargos/abonos regulares.
+// Importa estados de cuenta en PDF de Afirme (Cuenta Visión o tarjeta de crédito): subir → vista previa → confirmar.
 class ImportacionAfirmeController extends Controller
 {
     private const SESION = 'importacion_afirme';
-    private const SESION_TARJETA = 'importacion_afirme_tarjeta';
+
+    public function __construct(private SugeridorCategoria $sugeridor)
+    {
+    }
 
     public function create()
     {
@@ -30,7 +35,7 @@ class ImportacionAfirmeController extends Controller
         return view('importacion_afirme.create', compact('cuentas'));
     }
 
-    public function analizar(Request $request, AfirmeEstadoCuentaParser $parser)
+    public function analizar(Request $request, PdfTexto $pdf)
     {
         $request->validate([
             'cuenta_id' => 'required|exists:cuentas,id',
@@ -40,27 +45,39 @@ class ImportacionAfirmeController extends Controller
         $cuenta = Cuenta::findOrFail($request->cuenta_id);
         $this->autorizarAccesoNegocio($cuenta->negocio_id);
 
-        $archivo = $request->file('archivo')->getClientOriginalName();
-
         try {
-            $texto = $parser->extraerTexto($request->file('archivo')->getPathname());
-            if (AfirmeTarjetaParser::esEstadoTarjeta($texto)) {
-                return $this->analizarTarjeta($cuenta, $archivo, $texto);
-            }
-            $estado = $parser->parsearTexto($texto);
+            $texto = $pdf->extraer($request->file('archivo')->getPathname());
         } catch (\Throwable $e) {
             return back()->withInput()->withErrors(['archivo' => 'No se pudo leer el PDF: ' . $e->getMessage()]);
+        }
+
+        // El tipo de estado de cuenta se reconoce por su contenido
+        if (AfirmeTarjetaParser::reconoce($texto)) {
+            $estado = (new AfirmeTarjetaParser())->parsearTexto($texto);
+        } elseif (AfirmeEstadoCuentaParser::reconoce($texto)) {
+            $estado = (new AfirmeEstadoCuentaParser())->parsearTexto($texto);
+        } else {
+            return back()->withInput()->withErrors(['archivo' => 'El PDF no es un estado de cuenta Afirme reconocido (Cuenta Visión o tarjeta de crédito).']);
         }
 
         if ($estado['errores']) {
             return back()->withInput()->withErrors(['archivo' => $estado['errores']]);
         }
 
+        $meses = [];
+        if ($estado['tipo'] === 'tarjeta') {
+            [$filas, $msi] = (new AfirmeTarjetaClasificador($cuenta))->clasificar($estado);
+            $meses = $this->conciliarMeses($cuenta, $msi, $estado);
+        } else {
+            $filas = (new AfirmeClasificador($cuenta))->clasificar($estado['movimientos']);
+        }
+
         session([self::SESION => [
-            'cuenta_id' => $cuenta->id,
-            'archivo'   => $archivo,
-            'estado'    => array_diff_key($estado, ['movimientos' => true, 'errores' => true]),
-            'filas'     => (new AfirmeClasificador($cuenta))->clasificar($estado['movimientos']),
+            'cuenta_id'        => $cuenta->id,
+            'archivo'          => $request->file('archivo')->getClientOriginalName(),
+            'estado'           => array_diff_key($estado, ['movimientos' => true, 'msi' => true, 'errores' => true]),
+            'filas'            => $this->sugeridor->sugerir($filas),
+            'meses'            => $meses,
         ]]);
 
         return redirect()->route('importacion-afirme.preview');
@@ -79,18 +96,25 @@ class ImportacionAfirmeController extends Controller
         // Aviso si la cuenta elegida no parece ser la del estado de cuenta
         $estado = $importacion['estado'];
         $numero = preg_replace('/\D/', '', (string) $cuenta->numero);
-        $cuentaDistinta = $numero !== ''
-            && !in_array($numero, array_filter([$estado['clabe'], $estado['numero_cuenta'], ltrim((string) $estado['numero_cuenta'], '0')]), true);
+        if ($estado['tipo'] === 'tarjeta') {
+            $cuentaDistinta = $numero !== '' && $estado['ultimos4'] && substr($numero, -4) !== $estado['ultimos4'];
+        } else {
+            $cuentaDistinta = $numero !== ''
+                && !in_array($numero, array_filter([$estado['clabe'], $estado['numero_cuenta'], ltrim((string) $estado['numero_cuenta'], '0')]), true);
+        }
 
         $filas = $importacion['filas'];
         $categoriasGasto   = Categoria::whereIn('tipo', ['gasto', 'ambos'])->orderBy('nombre')->get();
         $categoriasIngreso = Categoria::whereIn('tipo', ['ingreso', 'ambos'])->orderBy('nombre')->get();
         $cuentas   = $this->aplicarFiltroNegocio(Cuenta::with('negocio'))->where('id', '!=', $cuenta->id)->orderBy('nombre')->get();
         $prestamos = $this->aplicarFiltroNegocio(Prestamo::with('banco'))->orderBy('concepto')->get();
+        $categoriasNuevas = $this->sugeridor->categoriasNuevas();
+        $meses   = $importacion['meses'] ?? [];
+        $compras = CompraMeses::whereIn('id', array_filter(array_column($meses, 'compra_id')))->get()->keyBy('id');
 
         return view('importacion_afirme.preview', compact(
             'importacion', 'cuenta', 'estado', 'filas', 'cuentaDistinta',
-            'categoriasGasto', 'categoriasIngreso', 'cuentas', 'prestamos'
+            'categoriasGasto', 'categoriasIngreso', 'categoriasNuevas', 'cuentas', 'prestamos', 'meses', 'compras'
         ));
     }
 
@@ -105,7 +129,30 @@ class ImportacionAfirmeController extends Controller
         $cuenta = Cuenta::findOrFail($importacion['cuenta_id']);
         $this->autorizarAccesoNegocio($cuenta->negocio_id);
 
-        [$registros, $errores] = $this->validarMovimientos($importacion['filas'], $request->input('filas', []), $cuenta, 'filas');
+        $entradas = $request->input('filas', []);
+        $registros = [];
+        $errores   = [];
+
+        foreach ($importacion['filas'] as $i => $fila) {
+            $entrada = $entradas[$i] ?? [];
+            $tipo    = $entrada['tipo'] ?? 'ignorar';
+            $etiqueta = 'Fila ' . ($i + 1) . " ({$fila['concepto']})";
+
+            if ($tipo === 'ignorar') {
+                continue;
+            }
+
+            $error = $this->validarFila($fila, $entrada, $cuenta);
+            if ($error) {
+                $errores["filas.{$i}"] = "{$etiqueta}: {$error}";
+                continue;
+            }
+
+            $registros[] = [$fila, $entrada];
+        }
+
+        [$altasMeses, $erroresMeses] = $this->validarMeses($importacion['meses'] ?? [], $request->input('meses', []), $cuenta);
+        $errores += $erroresMeses;
 
         if ($errores) {
             return redirect()->route('importacion-afirme.preview')->withInput()->withErrors($errores);
@@ -113,191 +160,113 @@ class ImportacionAfirmeController extends Controller
 
         $totales = array_fill_keys(['gasto', 'ingreso', 'traspaso', 'prestamo'], 0);
 
-        DB::transaction(function () use ($registros, $cuenta, $importacion, &$totales) {
+        DB::transaction(function () use ($registros, $altasMeses, $cuenta, $importacion, &$totales) {
             foreach ($registros as [$fila, $entrada]) {
-                $this->guardarFila($fila, $entrada, $cuenta, $importacion['archivo']);
+                $this->guardarFila($fila, $entrada, $cuenta, $importacion);
                 $totales[$entrada['tipo']]++;
+            }
+            foreach ($altasMeses as [$datos, $categoria]) {
+                $categoriaId = $this->sugeridor->resolver($categoria);
+                $this->sugeridor->aprender($datos['descripcion'], 'gasto', $categoriaId);
+                CompraMeses::registrar($cuenta, $datos, $categoriaId, false, auth()->id(), "Importado de {$importacion['archivo']}");
             }
         });
 
         session()->forget(self::SESION);
 
-        return redirect()->route('gastos.index')->with('exito', 'Estado de cuenta Afirme importado: ' . $this->resumenTotales($totales) . '.');
-    }
-
-    /** @return array{0: array, 1: array} filas a guardar [fila, entrada] y errores por fila */
-    private function validarMovimientos(array $filas, array $entradas, Cuenta $cuenta, string $campo): array
-    {
-        $registros = [];
-        $errores   = [];
-
-        foreach ($filas as $i => $fila) {
-            $entrada = $entradas[$i] ?? [];
-            if (($entrada['tipo'] ?? 'ignorar') === 'ignorar') {
-                continue;
-            }
-
-            $error = $this->validarFila($fila, $entrada, $cuenta);
-            if ($error) {
-                $errores["{$campo}.{$i}"] = 'Fila ' . ($i + 1) . " ({$fila['concepto']}): {$error}";
-                continue;
-            }
-
-            $registros[] = [$fila, $entrada];
+        $resumen = collect(['gasto' => 'gastos', 'ingreso' => 'ingresos', 'traspaso' => 'traspasos', 'prestamo' => 'pagos de préstamo'])
+            ->map(fn ($nombre, $tipo) => "{$totales[$tipo]} {$nombre}")
+            ->implode(', ');
+        if ($importacion['meses'] ?? []) {
+            $resumen .= ', ' . count($altasMeses) . ' compras a meses';
         }
 
-        return [$registros, $errores];
-    }
-
-    private function resumenTotales(array $totales): string
-    {
-        return collect(['gasto' => 'gastos', 'ingreso' => 'ingresos', 'traspaso' => 'traspasos', 'prestamo' => 'pagos de préstamo'])
-            ->map(fn ($nombre, $tipo) => ($totales[$tipo] ?? 0) . " {$nombre}")
-            ->implode(', ');
+        return redirect()->route('gastos.index')->with('exito', "Estado de cuenta Afirme importado: {$resumen}.");
     }
 
     public function cancelar()
     {
-        session()->forget([self::SESION, self::SESION_TARJETA]);
+        session()->forget(self::SESION);
         return redirect()->route('importacion-afirme.create');
     }
 
-    // ── Tarjeta de crédito: compras a meses sin intereses ──────────────────
-
-    private function analizarTarjeta(Cuenta $cuenta, string $archivo, string $texto)
+    /**
+     * Cada renglón de meses sin intereses se compara con las compras a meses de la
+     * tarjeta. La fecha del renglón es la del cargo del periodo; el total de meses
+     * no viene en el estado de cuenta y se deduce de monto original / pago.
+     */
+    private function conciliarMeses(Cuenta $cuenta, array $msi, array $estado): array
     {
-        $estado = (new AfirmeTarjetaParser())->parsearTexto($texto);
-
-        if ($estado['errores']) {
-            return back()->withInput()->withErrors(['archivo' => $estado['errores']]);
-        }
-        if (!$estado['renglones'] && !$estado['movimientos']) {
-            return back()->withInput()->withErrors(['archivo' => 'Este estado de cuenta de tarjeta no tiene compras a meses ni cargos o abonos.']);
-        }
-
         $conciliador = new ConciliadorComprasMeses($cuenta);
-        session()->forget(self::SESION);
-        session([self::SESION_TARJETA => [
-            'cuenta_id' => $cuenta->id,
-            'archivo'   => $archivo,
-            'estado'      => array_diff_key($estado, ['renglones' => true, 'movimientos' => true, 'errores' => true]),
-            'filas'       => array_map(fn ($r) => $r + $conciliador->conciliar($r), $estado['renglones']),
-            'movimientos' => (new AfirmeTarjetaClasificador($cuenta))->clasificar($estado['movimientos']),
-        ]]);
 
-        return redirect()->route('importacion-afirme.tarjeta');
+        return array_map(function ($renglon) use ($conciliador, $estado) {
+            $pago = (float) $renglon['pago_requerido'];
+            $renglon += [
+                'mensualidad'    => $pago,
+                'total_pagos'    => $pago > 0 ? (int) round($renglon['monto_original'] / $pago) : null,
+                'periodo_inicio' => $estado['periodo_inicio'],
+                'periodo_fin'    => $estado['periodo_fin'],
+            ];
+            $renglon['fecha'] ??= $estado['periodo_fin'];
+
+            // Categoría sugerida para el gasto de la compra (regla aprendida o palabra clave)
+            [$sugerida] = $this->sugeridor->sugerir([['naturaleza' => 'retiro', 'comercio' => $renglon['descripcion'], 'categoria_id' => null, 'motivo' => '']]);
+
+            return $renglon + $conciliador->conciliar($renglon) + ['categoria_id' => $sugerida['categoria_id']];
+        }, $msi);
     }
 
-    public function previewTarjeta()
+    /** @return array{0: array, 1: array} altas [datos del plan, categoría] y errores por renglón */
+    private function validarMeses(array $meses, array $entradas, Cuenta $cuenta): array
     {
-        $importacion = session(self::SESION_TARJETA);
-        if (!$importacion) {
-            return redirect()->route('importacion-afirme.create');
-        }
-
-        $cuenta = Cuenta::with('negocio')->findOrFail($importacion['cuenta_id']);
-        $this->autorizarAccesoNegocio($cuenta->negocio_id);
-
-        $estado = $importacion['estado'];
-        $filas  = $importacion['filas'];
-        $numero = preg_replace('/\D/', '', (string) $cuenta->numero);
-        $cuentaDistinta = $numero !== '' && $estado['ultimos_digitos'] && substr($numero, -4) !== $estado['ultimos_digitos'];
-        $sumaMensualidades = round(array_sum(array_column($filas, 'mensualidad')), 2);
-        $compras = CompraMeses::whereIn('id', array_filter(array_column($filas, 'compra_id')))->get()->keyBy('id');
-        $movimientos = $importacion['movimientos'] ?? [];
-        $categoriasGasto   = Categoria::whereIn('tipo', ['gasto', 'ambos'])->orderBy('nombre')->get();
-        $categoriasIngreso = Categoria::whereIn('tipo', ['ingreso', 'ambos'])->orderBy('nombre')->get();
-        $cuentas   = $this->aplicarFiltroNegocio(Cuenta::with('negocio'))->where('id', '!=', $cuenta->id)->orderBy('nombre')->get();
-        $prestamos = $this->aplicarFiltroNegocio(Prestamo::with('banco'))->orderBy('concepto')->get();
-
-        return view('importacion_afirme.tarjeta', compact(
-            'importacion', 'cuenta', 'estado', 'filas', 'movimientos', 'cuentaDistinta', 'sumaMensualidades', 'compras',
-            'categoriasGasto', 'categoriasIngreso', 'cuentas', 'prestamos'
-        ));
-    }
-
-    public function confirmarTarjeta(Request $request)
-    {
-        $importacion = session(self::SESION_TARJETA);
-        if (!$importacion) {
-            return redirect()->route('importacion-afirme.create')
-                ->withErrors(['archivo' => 'No hay una importación pendiente. Vuelve a subir el estado de cuenta.']);
-        }
-
-        $cuenta = Cuenta::findOrFail($importacion['cuenta_id']);
-        $this->autorizarAccesoNegocio($cuenta->negocio_id);
-
         $conciliador = new ConciliadorComprasMeses($cuenta);
-        $entradas = $request->input('filas', []);
-        $altas    = [];
-        $errores  = [];
+        $altas   = [];
+        $errores = [];
 
-        foreach ($importacion['filas'] as $i => $fila) {
+        foreach ($meses as $i => $renglon) {
             $entrada = $entradas[$i] ?? [];
-            if (($entrada['accion'] ?? 'ignorar') !== 'alta' || !in_array($fila['accion'], [ConciliadorComprasMeses::CREAR, ConciliadorComprasMeses::SIN_PLAN], true)) {
+            $puedeAlta = in_array($renglon['accion'], [ConciliadorComprasMeses::CREAR, ConciliadorComprasMeses::SIN_PLAN], true);
+            if (!$puedeAlta || ($entrada['accion'] ?? 'ignorar') !== 'alta') {
                 continue;
             }
 
-            $etiqueta = 'Fila ' . ($i + 1) . " ({$fila['descripcion']})";
-            [$datos, $error] = $this->validarAltaMeses($fila, $entrada, $cuenta);
-            if (!$error && $conciliador->conciliar($fila)['compra_id']) {
+            [$datos, $error] = $this->validarAltaMeses($renglon, $entrada, $cuenta);
+            if (!$error && $conciliador->conciliar($renglon)['compra_id']) {
                 $error = 'ya existe un plan para esta compra.';
             }
             if ($error) {
-                $errores["filas.{$i}"] = "{$etiqueta}: {$error}";
+                $errores["meses.{$i}"] = 'Compra a meses ' . ($i + 1) . " ({$renglon['descripcion']}): {$error}";
                 continue;
             }
-            $altas[] = [$datos, (int) $entrada['categoria_id']];
+            $altas[] = [$datos, $entrada['categoria_id']];
         }
 
-        [$registros, $erroresMovimientos] = $this->validarMovimientos($importacion['movimientos'] ?? [], $request->input('movimientos', []), $cuenta, 'movimientos');
-        $errores += $erroresMovimientos;
-
-        if ($errores) {
-            return redirect()->route('importacion-afirme.tarjeta')->withInput()->withErrors($errores);
-        }
-
-        $totales = array_fill_keys(['gasto', 'ingreso', 'traspaso', 'prestamo'], 0);
-
-        DB::transaction(function () use ($altas, $registros, $cuenta, $importacion, &$totales) {
-            foreach ($altas as [$datos, $categoriaId]) {
-                CompraMeses::registrar($cuenta, $datos, $categoriaId, false, auth()->id(), "Importado de {$importacion['archivo']}");
-            }
-            foreach ($registros as [$fila, $entrada]) {
-                $this->guardarFila($fila, $entrada, $cuenta, $importacion['archivo'], 'tarjeta');
-                $totales[$entrada['tipo']]++;
-            }
-        });
-
-        session()->forget(self::SESION_TARJETA);
-
-        return redirect()->route('gastos.index')->with('exito', 'Estado de cuenta de tarjeta Afirme importado: '
-            . count($altas) . ' compras a meses, ' . $this->resumenTotales($totales) . '.');
+        return [$altas, $errores];
     }
 
     /** @return array{0: ?array, 1: ?string} campos del plan o el error */
-    private function validarAltaMeses(array $fila, array $entrada, Cuenta $cuenta): array
+    private function validarAltaMeses(array $renglon, array $entrada, Cuenta $cuenta): array
     {
         $descripcion = trim($entrada['descripcion'] ?? '');
         if ($descripcion === '' || mb_strlen($descripcion) > 255) {
             return [null, 'la descripción es obligatoria (máximo 255 caracteres).'];
         }
-        if (!Categoria::where('id', $entrada['categoria_id'] ?? null)->whereIn('tipo', ['gasto', 'ambos'])->exists()) {
+        if (!$this->sugeridor->esValida($entrada['categoria_id'] ?? null, 'gasto')) {
             return [null, 'selecciona una categoría.'];
         }
 
         $meses = filter_var($entrada['meses'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 60]]);
-        if (!$meses || ($meses < (int) $fila['numero_pago'])) {
+        if (!$meses || $meses < (int) $renglon['numero_pago']) {
             return [null, 'el número de meses no es válido.'];
         }
         $mensualidad = round((float) ($entrada['mensualidad'] ?? 0), 2);
-        if ($error = CompraMeses::errorMensualidad((float) $fila['monto_original'], $meses, $mensualidad)) {
+        if ($error = CompraMeses::errorMensualidad((float) $renglon['monto_original'], $meses, $mensualidad)) {
             return [null, mb_lcfirst($error)];
         }
 
         try {
-            $compra = \Carbon\Carbon::createFromFormat('!Y-m-d', $entrada['fecha_compra'] ?? '');
-            $primer = \Carbon\Carbon::createFromFormat('!Y-m-d', $entrada['fecha_primer_cargo'] ?? '');
+            $compra = Carbon::createFromFormat('!Y-m-d', $entrada['fecha_compra'] ?? '');
+            $primer = Carbon::createFromFormat('!Y-m-d', $entrada['fecha_primer_cargo'] ?? '');
         } catch (\Throwable) {
             return [null, 'revisa la fecha de compra y la del primer cargo.'];
         }
@@ -308,7 +277,7 @@ class ImportacionAfirmeController extends Controller
         return [[
             'cuenta_id'          => $cuenta->id,
             'descripcion'        => $descripcion,
-            'monto_original'     => (float) $fila['monto_original'],
+            'monto_original'     => (float) $renglon['monto_original'],
             'meses'              => $meses,
             'mensualidad'        => $mensualidad,
             'fecha_compra'       => $compra->toDateString(),
@@ -342,10 +311,7 @@ class ImportacionAfirmeController extends Controller
         }
 
         if ($tipo === 'gasto' || $tipo === 'ingreso') {
-            $existe = Categoria::where('id', $entrada['categoria_id'] ?? null)
-                ->whereIn('tipo', [$tipo, 'ambos'])
-                ->exists();
-            return $existe ? null : 'selecciona una categoría.';
+            return $this->sugeridor->esValida($entrada['categoria_id'] ?? null, $tipo) ? null : 'selecciona una categoría.';
         }
 
         if ($tipo === 'traspaso') {
@@ -364,23 +330,29 @@ class ImportacionAfirmeController extends Controller
             : 'indica si el pago es a capital o a interés.';
     }
 
-    private function guardarFila(array $fila, array $entrada, Cuenta $cuenta, string $archivo, string $formaPago = 'transferencia'): void
+    private function guardarFila(array $fila, array $entrada, Cuenta $cuenta, array $importacion): void
     {
         $concepto = trim($entrada['concepto']);
-        $notas    = "Importado de {$archivo}: {$fila['detalle']}";
+        $notas    = "Importado de {$importacion['archivo']}: {$fila['detalle']}";
+
+        // La categoría elegida queda como regla para el comercio en las siguientes importaciones
+        if (in_array($entrada['tipo'], ['gasto', 'ingreso'], true)) {
+            $categoriaId = $this->sugeridor->resolver($entrada['categoria_id']);
+            $this->sugeridor->aprender($fila['comercio'] ?? null, $entrada['tipo'], $categoriaId);
+        }
 
         switch ($entrada['tipo']) {
             case 'gasto':
                 Gasto::create([
                     'negocio_id'   => $cuenta->negocio_id,
-                    'categoria_id' => $entrada['categoria_id'],
+                    'categoria_id' => $categoriaId,
                     'cuenta_id'    => $cuenta->id,
                     'user_id'      => auth()->id(),
                     'monto'        => $fila['monto'],
                     'referencia'   => $fila['referencia'],
                     'fecha'        => $fila['fecha'],
                     'concepto'     => $concepto,
-                    'forma_pago'   => $formaPago,
+                    'forma_pago'   => $importacion['estado']['tipo'] === 'tarjeta' ? 'tarjeta' : 'transferencia',
                     'notas'        => $notas,
                     'tiene_iva'    => $fila['monto_iva'] > 0,
                     'monto_iva'    => $fila['monto_iva'],
@@ -390,14 +362,14 @@ class ImportacionAfirmeController extends Controller
             case 'ingreso':
                 Ingreso::create([
                     'negocio_id'   => $cuenta->negocio_id,
-                    'categoria_id' => $entrada['categoria_id'],
+                    'categoria_id' => $categoriaId,
                     'cuenta_id'    => $cuenta->id,
                     'user_id'      => auth()->id(),
                     'monto'        => $fila['monto'],
                     'referencia'   => $fila['referencia'],
                     'fecha'        => $fila['fecha'],
                     'concepto'     => $concepto,
-                    'forma_pago'   => $formaPago,
+                    'forma_pago'   => 'transferencia',
                     'notas'        => $notas,
                     'tiene_iva'    => false,
                     'monto_iva'    => 0,

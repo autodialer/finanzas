@@ -29,7 +29,7 @@
                     @csrf
 
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Cuenta Afirme</label>
+                        <label class="form-label fw-semibold">Cuenta o tarjeta Afirme</label>
                         <select name="cuenta_id" class="form-select" required>
                             <option value="">Selecciona...</option>
                             @foreach($cuentas as $cuenta)
@@ -62,8 +62,8 @@
             </div>
             <div class="card-body small">
                 <ul class="mb-0">
-                    <li>Se lee la tabla <strong>Detalle de operaciones</strong> del estado de cuenta <strong>Cuenta Visión</strong>.</li>
-                    <li>Antes de continuar se verifica que saldo inicial + depósitos − retiros dé el saldo al corte. Si no cuadra, no se importa.</li>
+                    <li>Acepta el estado de cuenta de la <strong>Cuenta Visión</strong> o de la <strong>tarjeta de crédito</strong>; el tipo se detecta solo.</li>
+                    <li>Antes de continuar se verifica que los movimientos cuadren con el resumen del estado de cuenta. Si no cuadra, no se importa.</li>
                     <li>Verás una vista previa con un tipo sugerido para cada movimiento. Nada se guarda hasta que confirmes.</li>
                     <li>Los movimientos ya importados (misma fecha, referencia y monto) se marcan para no duplicarlos.</li>
                     <li>Si subes el estado de cuenta de la <strong>tarjeta de crédito</strong> Afirme, se lee la sección de <strong>compras a meses sin intereses</strong>: se comparan con tus compras a meses registradas y puedes dar de alta las que falten.</li>

@@ -3,18 +3,12 @@
 namespace App\Services;
 
 /**
- * Lee el estado de cuenta de la tarjeta de crédito Afirme (el texto ya extraído
- * del PDF): la sección "Compras y cargos diferidos a meses sin intereses" y la
- * de "Cargos, abonos y compras regulares (no a meses)".
+ * Lee el estado de cuenta en PDF de la tarjeta de crédito Afirme.
  *
- * Meses sin intereses:
- * Cada renglón trae fecha del cargo del periodo, descripción, monto original,
- * saldo pendiente (después del pago del periodo), pago requerido y número de
- * pago. El total de meses no viene: se deduce de monto original / pago.
- *
- * Cargos regulares: cada movimiento trae su tipo ("COMPRA NACIONAL", "PAGO
- * ONLINE"...), el comercio, fecha de operación, fecha de cargo y el monto con
- * signo (+ cargo, − abono). Las sumas deben cuadrar con el resumen del periodo.
+ * Toma dos secciones del "Desglose de movimientos": los cargos y abonos
+ * regulares (no a meses) y las compras diferidas a meses sin intereses. El
+ * resto del documento (tablas informativas, notas, glosario) se ignora.
+ * Del número de tarjeta solo se conservan los últimos 4 dígitos.
  */
 class AfirmeTarjetaParser
 {
@@ -23,236 +17,234 @@ class AfirmeTarjetaParser
         'JUL' => 7, 'AGO' => 8, 'SEP' => 9, 'OCT' => 10, 'NOV' => 11, 'DIC' => 12,
     ];
 
-    private const INICIO_SECCION = 'COMPRAS Y CARGOS DIFERIDOS A MESES SIN INTERESES';
-    private const FIN_SECCION    = '/^(CARGOS, ABONOS Y COMPRAS REGULARES|COMPRAS Y CARGOS DIFERIDOS A MESES CON INTERESES|NOTAS ACLARATORIAS)/u';
-    private const FECHA          = '/^(\d{2})-([A-Z]{3})-(\d{4})$/u';
-    private const IMPORTES       = '/^\$\s*([\d,]+\.\d{2})\s+\$\s*([\d,]+\.\d{2})\s+\$\s*([\d,]+\.\d{2})\s+(\d+)\s+([\d.]+)\s*%/u';
-    private const INICIO_REGULARES = 'CARGOS, ABONOS Y COMPRAS REGULARES (NO A MESES)';
-    private const FIN_REGULARES    = '/^(Total de cargos:|Total de abonos:|CARGOS NO RECONOCIDOS)/u';
-    private const MOVIMIENTO       = '/^(.*?)(\d{2}-[A-Z]{3}-\d{4})\s+(\d{2}-[A-Z]{3}-\d{4})\s+([+-])\s*\$\s*([\d,]+\.\d{2})\s*$/u';
-    private const RUIDO_REGULARES  = '/^(Fecha|de la|operaci[óo]n|de|cargo|Descripci[óo]n del movimiento.*|CARGOS, ABONOS Y COMPRAS REGULARES.*)$/u';
-    // Encabezados de página y de columnas que se repiten si la tabla sigue en otra hoja
-    private const RUIDO          = '/^(\d{3}-\d{3}$|N[úu]mero de Tarjeta|Notas:|P[áa]gina\s|Tarjeta (titular|adicional)|MESES SIN INTERESES$)/u';
+    private const FECHA   = '\d{2}-[A-Z]{3}-\d{4}';
+    private const IMPORTE = '\$\s*([\d,]+\.\d{2})';
 
-    public static function esEstadoTarjeta(string $texto): bool
+    private const SECCION_REGULARES = '/^CARGOS, ABONOS Y COMPRAS REGULARES/u';
+    private const SECCION_MSI       = '/^COMPRAS Y CARGOS DIFERIDOS A MESES SIN INTERESES/u';
+    // Cualquier otra sección o tabla que cierra las anteriores
+    private const FIN_SECCION = '/^(Total de cargos|Total de abonos|CARGOS NO RECONOCIDOS|COMPRAS Y CARGOS DIFERIDOS A MESES CON INTERESES|NOTAS ACLARATORIAS|ATENCI[ÓO]N DE QUEJAS)/u';
+
+    // Encabezados de página y de columnas que se repiten dentro de las secciones
+    private const RUIDO = [
+        '/^\d{3}-\d{3}$/', '/^N[úu]mero de Tarjeta/u', '/^Notas:/', '/^P[áa]gina\s+\d+/u', '/^Tarjeta (titular|adicional)/',
+        '/^(Fecha|Fecha de|de la|la operación|operación|de|cargo|Descripción|Monto|original|Saldo|pendiente|Pago|requerido|Núm\. de|pago|Tasa de|interés|aplicable)$/u',
+        '/^Descripci[óo]n del movimiento/u',
+    ];
+
+    public function parsearPdf(string $ruta): array
     {
-        return (bool) preg_match('/TARJETA DE CR[EÉ]DITO.*AFIRME/u', $texto);
+        return $this->parsearTexto((new PdfTexto())->extraer($ruta));
+    }
+
+    // ¿El texto es de un estado de cuenta de tarjeta de crédito Afirme?
+    public static function reconoce(string $texto): bool
+    {
+        return (bool) preg_match('/TARJETA DE CR[ÉE]DITO/u', $texto)
+            && (bool) preg_match(self::SECCION_REGULARES . 'm', $texto);
     }
 
     public function parsearTexto(string $texto): array
     {
         $errores = [];
 
-        $periodo = preg_match('/Per[íi]odo:\s*(\d{2}-[A-Z]{3}-\d{4})\s+al\s+(\d{2}-[A-Z]{3}-\d{4})/u', $texto, $m)
-            ? [$this->fecha($m[1]), $this->fecha($m[2])]
-            : [null, null];
-        if (!$periodo[0] || !$periodo[1]) {
+        $periodo = null;
+        $patronPeriodo = '/Per[ií]odo:\s*(' . self::FECHA . ')\s+al\s+(' . self::FECHA . ')/u';
+        if (preg_match($patronPeriodo, $texto, $m)) {
+            $periodo = [$this->fecha($m[1]), $this->fecha($m[2])];
+        }
+        if (!$periodo || in_array(null, $periodo, true)) {
             $errores[] = 'No se encontró el período del estado de cuenta ("Período: ... al ...").';
         }
 
-        preg_match('/N[úu]mero de Tarjeta:\s*(\d{12,19})/u', $texto, $m);
-        $tarjeta = $m[1] ?? null;
-
-        // Total de mensualidades del periodo según el resumen (incluye meses con intereses, si hubiera)
-        $cargosMeses = preg_match('/Cargos y compras a meses \(capital\)\s*(?:\d+\s+)?\+\s*\$\s*([\d,]+\.\d{2})/u', $texto, $m)
-            ? $this->importe($m[1])
-            : null;
-
-        [$renglones, $erroresSeccion] = $this->leerSeccion($texto, $periodo);
-
         $resumen = [
-            'cargos_regulares' => $this->leerResumen('Cargos regulares \(no a meses\)', $texto),
-            'intereses'        => $this->leerResumen('Monto de intereses', $texto),
-            'comisiones'       => $this->leerResumen('Monto de comisiones', $texto),
-            'iva'              => $this->leerResumen('IVA de intereses y comisiones', $texto),
-            'pagos_abonos'     => $this->leerResumen('Pagos y abonos', $texto),
+            'adeudo_anterior'   => $this->importe('/Adeudo del periodo anterior\s*=\s*' . self::IMPORTE . '/u', $texto),
+            'cargos_regulares'  => $this->importe('/Cargos regulares \(no a meses\)\s*\+\s*' . self::IMPORTE . '/u', $texto),
+            'cargos_meses'      => $this->importe('/Cargos y compras a meses \(capital\)\s*(?:\d+\s+)?\+\s*' . self::IMPORTE . '/u', $texto),
+            'pagos_abonos'      => $this->importe('/Pagos y abonos\s*-\s*' . self::IMPORTE . '/u', $texto),
+            'pago_no_intereses' => $this->importe('/PAGO PARA NO GENERAR INTERESES\s*=\s*' . self::IMPORTE . '/u', $texto),
         ];
-        [$movimientos, $erroresMovimientos] = $this->leerMovimientos($texto);
-        if (!$erroresMovimientos) {
-            $erroresMovimientos = $this->validarMovimientos($resumen, $movimientos);
+        if ($resumen['cargos_regulares'] === null) {
+            $errores[] = 'No se encontró "Cargos regulares (no a meses)" en el resumen del estado de cuenta.';
+        }
+        if ($resumen['pagos_abonos'] === null) {
+            $errores[] = 'No se encontró "Pagos y abonos" en el resumen del estado de cuenta.';
+        }
+
+        // Nunca se conserva el número completo de la tarjeta
+        $ultimos4 = preg_match('/N[úu]mero de Tarjeta:\s*(\d{12,19})/u', $texto, $m) ? substr($m[1], -4) : null;
+
+        [$movimientos, $msi, $erroresSecciones] = $this->leerSecciones($texto);
+        $errores = array_merge($errores, $erroresSecciones);
+
+        if (!$errores) {
+            $errores = $this->validar($resumen, $movimientos);
         }
 
         return [
-            'periodo_inicio'  => $periodo[0],
-            'periodo_fin'     => $periodo[1],
-            'ultimos_digitos' => $tarjeta ? substr($tarjeta, -4) : null,
-            'cargos_meses'    => $cargosMeses,
-            'renglones'       => $renglones,
-            'resumen'         => $resumen,
-            'movimientos'     => $movimientos,
-            'errores'         => array_merge($errores, $erroresSeccion, $erroresMovimientos),
-        ];
-    }
-
-    private function leerSeccion(string $texto, array $periodo): array
-    {
-        $inicio = mb_strpos($texto, self::INICIO_SECCION);
-        if ($inicio === false) {
-            return [[], []]; // el estado de cuenta no tiene compras a meses
-        }
-
-        $renglones = [];
-        $errores   = [];
-        $actual    = null;
-
-        $lineas = preg_split('/\R/u', mb_substr($texto, $inicio + mb_strlen(self::INICIO_SECCION)));
-        foreach ($lineas as $linea) {
-            $linea = trim($linea);
-            if (preg_match(self::FIN_SECCION, $linea)) {
-                break;
-            }
-
-            if (preg_match(self::FECHA, $linea)) {
-                if ($actual) {
-                    $errores[] = "No se encontraron los importes del renglón del {$actual['fecha_texto']}.";
-                }
-                $actual = ['fecha_texto' => $linea, 'descripcion' => []];
-                continue;
-            }
-
-            if (!$actual) {
-                continue; // encabezados antes del primer renglón
-            }
-
-            if (preg_match(self::IMPORTES, $linea, $m)) {
-                $renglones[] = $this->renglon($actual, $m, $periodo);
-                $actual = null;
-                continue;
-            }
-
-            if ($linea !== '' && !preg_match(self::RUIDO, $linea)) {
-                $actual['descripcion'][] = $linea;
-            }
-        }
-
-        if ($actual) {
-            $errores[] = "No se encontraron los importes del renglón del {$actual['fecha_texto']}.";
-        }
-
-        return [$renglones, $errores];
-    }
-
-    private function leerMovimientos(string $texto): array
-    {
-        $inicio = mb_strpos($texto, self::INICIO_REGULARES);
-        if ($inicio === false) {
-            return [[], []];
-        }
-
-        $movimientos = [];
-        $descripcion = [];
-
-        $lineas = preg_split('/\R/u', mb_substr($texto, $inicio + mb_strlen(self::INICIO_REGULARES)));
-        foreach ($lineas as $linea) {
-            $linea = trim($linea);
-            if (preg_match(self::FIN_REGULARES, $linea)) {
-                break;
-            }
-            if ($linea === '' || preg_match(self::RUIDO, $linea) || preg_match(self::RUIDO_REGULARES, $linea)) {
-                continue;
-            }
-
-            if (!preg_match(self::MOVIMIENTO, $linea, $m)) {
-                $descripcion[] = $linea;
-                continue;
-            }
-
-            // Una descripción de una sola línea viene pegada a la fecha ("PAGO ONLINE16-JUN-2026")
-            if (trim($m[1]) !== '') {
-                $descripcion[] = trim($m[1]);
-            }
-            $tipo     = $descripcion[0] ?? '';
-            $comercio = count($descripcion) > 1 ? implode(' ', array_slice($descripcion, 1)) : $tipo;
-
-            $movimientos[] = [
-                'fecha'        => $this->fecha($m[2]),
-                'fecha_cargo'  => $this->fecha($m[3]),
-                'naturaleza'   => $m[4] === '+' ? 'cargo' : 'abono',
-                'monto'        => $this->importe($m[5]),
-                'tipo'         => $tipo,
-                'descripcion'  => $comercio,
-            ];
-            $descripcion = [];
-        }
-
-        $errores = $descripcion
-            ? ['Quedaron líneas sin movimiento al final de los cargos regulares: ' . implode(' ', $descripcion)]
-            : [];
-
-        return [$movimientos, $errores];
-    }
-
-    /**
-     * Los cargos deben sumar "Cargos regulares" (más intereses, comisiones e IVA si
-     * vienen como movimientos) y los abonos "Pagos y abonos". Si no cuadra, algo se
-     * leyó mal y no se importa.
-     */
-    private function validarMovimientos(array $resumen, array $movimientos): array
-    {
-        $errores = [];
-        $etiquetas = ['cargos_regulares' => 'Cargos regulares (no a meses)', 'pagos_abonos' => 'Pagos y abonos'];
-        foreach ($etiquetas as $clave => $etiqueta) {
-            if ($resumen[$clave] === null) {
-                $errores[] = "No se encontró \"{$etiqueta}\" en el resumen del estado de cuenta.";
-            }
-        }
-        if ($errores) {
-            return $errores;
-        }
-
-        $cargos = round(array_sum(array_column(array_filter($movimientos, fn ($m) => $m['naturaleza'] === 'cargo'), 'monto')), 2);
-        $abonos = round(array_sum(array_column(array_filter($movimientos, fn ($m) => $m['naturaleza'] === 'abono'), 'monto')), 2);
-        $conCostos = $resumen['cargos_regulares'] + ($resumen['intereses'] ?? 0) + ($resumen['comisiones'] ?? 0) + ($resumen['iva'] ?? 0);
-
-        if (abs($cargos - $resumen['cargos_regulares']) > 0.004 && abs($cargos - $conCostos) > 0.004) {
-            $errores[] = 'Los cargos leídos suman $' . number_format($cargos, 2)
-                . ' y el resumen indica $' . number_format($resumen['cargos_regulares'], 2) . ' de cargos regulares.';
-        }
-        if (abs($abonos - $resumen['pagos_abonos']) > 0.004) {
-            $errores[] = 'Los abonos leídos suman $' . number_format($abonos, 2)
-                . ' y el resumen indica $' . number_format($resumen['pagos_abonos'], 2) . ' de pagos y abonos.';
-        }
-
-        return $errores;
-    }
-
-    private function leerResumen(string $etiqueta, string $texto): ?float
-    {
-        // Algunas etiquetas llevan el número de nota aclaratoria antes del importe
-        return preg_match('/' . $etiqueta . '\s*(?:\d+\s+)?[+-]\s*\$\s*([\d,]+\.\d{2})/u', $texto, $m)
-            ? $this->importe($m[1])
-            : null;
-    }
-
-    private function renglon(array $actual, array $m, array $periodo): array
-    {
-        $monto = $this->importe($m[1]);
-        $pago  = $this->importe($m[3]);
-
-        return [
-            'fecha'           => $this->fecha($actual['fecha_texto']),
-            'descripcion'     => implode(' ', $actual['descripcion']),
-            'monto_original'  => $monto,
-            'saldo_pendiente' => $this->importe($m[2]),
-            'mensualidad'     => $pago,
-            'numero_pago'     => (int) $m[4],
-            'total_pagos'     => $pago > 0 ? (int) round($monto / $pago) : null,
-            'tasa'            => (float) $m[5],
-            'periodo_inicio'  => $periodo[0],
-            'periodo_fin'     => $periodo[1],
+            'tipo'           => 'tarjeta',
+            'periodo_inicio' => $periodo[0] ?? null,
+            'periodo_fin'    => $periodo[1] ?? null,
+            'ultimos4'       => $ultimos4,
+            'resumen'        => $resumen,
+            'movimientos'    => $movimientos,
+            'msi'            => $msi,
+            'errores'        => $errores,
         ];
     }
 
     private function fecha(string $texto): ?string
     {
-        if (!preg_match(self::FECHA, $texto, $m) || !isset(self::MESES[$m[2]])) {
-            return null;
-        }
-        return sprintf('%04d-%02d-%02d', $m[3], self::MESES[$m[2]], $m[1]);
+        [$dia, $mes, $anio] = explode('-', $texto);
+        $mes = self::MESES[$mes] ?? null;
+        return $mes && checkdate($mes, (int) $dia, (int) $anio) ? sprintf('%04d-%02d-%02d', $anio, $mes, $dia) : null;
     }
 
-    private function importe(string $texto): float
+    private function importe(string $patron, string $texto): ?float
     {
-        return (float) str_replace(',', '', $texto);
+        return preg_match($patron, $texto, $m) ? $this->aNumero($m[1]) : null;
+    }
+
+    private function aNumero(string $importe): float
+    {
+        return round((float) str_replace(',', '', $importe), 2);
+    }
+
+    private function esRuido(string $linea): bool
+    {
+        foreach (self::RUIDO as $patron) {
+            if (preg_match($patron, $linea)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Recorre el texto acumulando fechas y líneas de descripción hasta encontrar
+     * el renglón que cierra cada movimiento (el monto). Así no importa si las
+     * fechas salen antes, pegadas al texto o en su propia línea.
+     */
+    private function leerSecciones(string $texto): array
+    {
+        $movimientos = [];
+        $msi     = [];
+        $errores = [];
+        $seccion = null;
+        $fechas  = [];
+        $descripcion = [];
+
+        $reiniciar = function () use (&$fechas, &$descripcion) {
+            $fechas = [];
+            $descripcion = [];
+        };
+
+        foreach (preg_split('/\r\n|\n|\r/', $texto) as $linea) {
+            $linea = trim($linea);
+
+            if (preg_match(self::SECCION_REGULARES, $linea)) {
+                $seccion = 'regulares';
+                $reiniciar();
+                continue;
+            }
+            if (preg_match(self::SECCION_MSI, $linea)) {
+                $seccion = 'msi';
+                $reiniciar();
+                continue;
+            }
+            if ($seccion === null) {
+                continue;
+            }
+            if (preg_match(self::FIN_SECCION, $linea)) {
+                $seccion = null;
+                continue;
+            }
+            if ($linea === '' || $this->esRuido($linea)) {
+                continue;
+            }
+
+            if ($seccion === 'msi') {
+                $patron = '/' . self::IMPORTE . '\s+' . self::IMPORTE . '\s+' . self::IMPORTE . '\s+(\d+)\s+[\d.]+\s*%/u';
+                if (preg_match($patron, $linea, $m)) {
+                    $msi[] = [
+                        'fecha'           => $fechas ? $this->fecha($fechas[0]) : null,
+                        'descripcion'     => implode(' ', array_diff($descripcion, ['MESES SIN INTERESES'])),
+                        'monto_original'  => $this->aNumero($m[1]),
+                        'saldo_pendiente' => $this->aNumero($m[2]),
+                        'pago_requerido'  => $this->aNumero($m[3]),
+                        'numero_pago'     => (int) $m[4],
+                    ];
+                    $reiniciar();
+                    continue;
+                }
+            }
+
+            preg_match_all('/' . self::FECHA . '/u', $linea, $encontradas);
+            $fechas = array_merge($fechas, $encontradas[0]);
+            $resto  = trim(preg_replace('/' . self::FECHA . '/u', ' ', $linea));
+
+            if ($seccion === 'regulares' && preg_match('/([+-])\s*' . self::IMPORTE . '$/u', $resto, $m)) {
+                $concepto = trim(substr($resto, 0, -strlen($m[0])));
+                if ($concepto !== '') {
+                    $descripcion[] = $concepto;
+                }
+
+                if (!$fechas) {
+                    $errores[] = 'No se encontró la fecha del movimiento "' . implode(' ', $descripcion) . "\" por {$m[1]}\${$m[2]}.";
+                } else {
+                    $movimientos[] = $this->movimiento($fechas, $descripcion, $m[1], $m[2]);
+                }
+                $reiniciar();
+                continue;
+            }
+
+            if ($resto !== '') {
+                $descripcion[] = preg_replace('/\s+/u', ' ', $resto);
+            }
+        }
+
+        return [$movimientos, $msi, $errores];
+    }
+
+    private function movimiento(array $fechas, array $descripcion, string $signo, string $monto): array
+    {
+        // "COMPRA NACIONAL" + comercio; los movimientos de una sola línea (PAGO ONLINE) son su propio comercio
+        $operacion = count($descripcion) > 1 ? array_shift($descripcion) : null;
+        $comercio  = implode(' ', $descripcion);
+
+        return [
+            'fecha'       => $this->fecha($fechas[0]),
+            'fecha_cargo' => $this->fecha($fechas[1] ?? $fechas[0]),
+            'operacion'   => $operacion,
+            'comercio'    => $comercio,
+            'descripcion' => trim(($operacion ? "{$operacion} " : '') . $comercio),
+            'naturaleza'  => $signo === '+' ? 'cargo' : 'abono',
+            'monto'       => $this->aNumero($monto),
+        ];
+    }
+
+    private function validar(array $resumen, array $movimientos): array
+    {
+        $errores  = [];
+        $centavos = fn (float $v) => (int) round($v * 100);
+        $formato  = fn (int $c) => '$' . number_format($c / 100, 2);
+
+        $cargos = 0;
+        $abonos = 0;
+        foreach ($movimientos as $mov) {
+            if ($mov['fecha'] === null) {
+                $errores[] = "Fecha inválida en el movimiento \"{$mov['descripcion']}\".";
+            }
+            $mov['naturaleza'] === 'cargo' ? $cargos += $centavos($mov['monto']) : $abonos += $centavos($mov['monto']);
+        }
+
+        if ($cargos !== $centavos($resumen['cargos_regulares'])) {
+            $errores[] = "La suma de cargos ({$formato($cargos)}) no coincide con \"Cargos regulares (no a meses)\" del estado de cuenta ({$formato($centavos($resumen['cargos_regulares']))}).";
+        }
+        if ($abonos !== $centavos($resumen['pagos_abonos'])) {
+            $errores[] = "La suma de abonos ({$formato($abonos)}) no coincide con \"Pagos y abonos\" del estado de cuenta ({$formato($centavos($resumen['pagos_abonos']))}).";
+        }
+
+        return $errores;
     }
 }

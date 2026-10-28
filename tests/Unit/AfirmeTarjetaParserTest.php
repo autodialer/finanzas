@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Services\AfirmeEstadoCuentaParser;
 use App\Services\AfirmeTarjetaParser;
 use PHPUnit\Framework\TestCase;
 use Tests\Fixtures\AfirmeFixture;
@@ -9,84 +10,77 @@ use Tests\Fixtures\AfirmeTarjetaFixture;
 
 class AfirmeTarjetaParserTest extends TestCase
 {
-    public function test_reconoce_el_estado_de_cuenta_de_tarjeta(): void
+    private function parsear(array $reemplazos = []): array
     {
-        $this->assertTrue(AfirmeTarjetaParser::esEstadoTarjeta(AfirmeTarjetaFixture::texto()));
-        $this->assertFalse(AfirmeTarjetaParser::esEstadoTarjeta(AfirmeFixture::texto()));
+        return (new AfirmeTarjetaParser())->parsearTexto(AfirmeTarjetaFixture::texto($reemplazos));
     }
 
-    public function test_lee_las_compras_a_meses(): void
+    public function test_reconoce_cada_tipo_de_estado_de_cuenta(): void
     {
-        $estado = (new AfirmeTarjetaParser())->parsearTexto(AfirmeTarjetaFixture::texto());
-
-        $this->assertSame([], $estado['errores']);
-        $this->assertSame('2026-03-10', $estado['periodo_inicio']);
-        $this->assertSame('2026-04-10', $estado['periodo_fin']);
-        $this->assertSame('9999', $estado['ultimos_digitos']);
-        $this->assertSame(2300.0, $estado['cargos_meses']);
-        $this->assertCount(3, $estado['renglones']);
-
-        $primero = $estado['renglones'][0];
-        $this->assertSame('2026-03-15', $primero['fecha']);
-        $this->assertSame('COMERCIO FICTICIO UNO', $primero['descripcion']);
-        $this->assertSame(12000.0, $primero['monto_original']);
-        $this->assertSame(10000.0, $primero['saldo_pendiente']);
-        $this->assertSame(1000.0, $primero['mensualidad']);
-        $this->assertSame(2, $primero['numero_pago']);
-        $this->assertSame(12, $primero['total_pagos']);
-        $this->assertSame(12, $estado['renglones'][2]['total_pagos']);
+        $this->assertTrue(AfirmeTarjetaParser::reconoce(AfirmeTarjetaFixture::texto()));
+        $this->assertFalse(AfirmeEstadoCuentaParser::reconoce(AfirmeTarjetaFixture::texto()));
+        $this->assertTrue(AfirmeEstadoCuentaParser::reconoce(AfirmeFixture::texto()));
+        $this->assertFalse(AfirmeTarjetaParser::reconoce(AfirmeFixture::texto()));
     }
 
-    public function test_la_tabla_puede_seguir_en_otra_pagina(): void
+    public function test_lee_resumen_y_solo_conserva_los_ultimos_4_digitos(): void
     {
-        $estado = (new AfirmeTarjetaParser())->parsearTexto(AfirmeTarjetaFixture::texto(null, true));
+        $estado = $this->parsear();
 
         $this->assertSame([], $estado['errores']);
+        $this->assertSame(['2026-02-10', '2026-03-10'], [$estado['periodo_inicio'], $estado['periodo_fin']]);
+        $this->assertSame(1720.25, $estado['resumen']['cargos_regulares']);
+        $this->assertSame(1000.00, $estado['resumen']['pagos_abonos']);
+        $this->assertSame(1500.00, $estado['resumen']['cargos_meses']);
+        $this->assertSame('9999', $estado['ultimos4']);
+        $this->assertStringNotContainsString(AfirmeTarjetaFixture::NUMERO_TARJETA, json_encode($estado));
+    }
+
+    public function test_lee_cargos_y_abonos_de_varias_paginas(): void
+    {
+        $movs = $this->parsear()['movimientos'];
+
         $this->assertSame(
-            ['COMERCIO FICTICIO UNO', 'TIENDA FICTICIA DOS', 'SERVICIO FICTICIO TRES'],
-            array_column($estado['renglones'], 'descripcion')
+            [
+                ['2026-02-11', '2026-02-12', 'cargo', 50.00, 'OXXO CENTRO FICTICIO'],
+                ['2026-02-12', '2026-02-13', 'cargo', 450.00, 'REST LA PRUEBA'],
+                ['2026-02-15', '2026-02-15', 'abono', 1000.00, 'PAGO ONLINE'],          // fechas pegadas al texto
+                ['2026-02-20', '2026-02-21', 'cargo', 800.00, 'GASOL FICTICIA NORTE'],  // fechas en líneas distintas
+                ['2026-02-22', '2026-02-23', 'cargo', 120.25, 'FARMACIA INVENTADA'],
+                ['2026-03-01', '2026-03-02', 'cargo', 300.00, 'TIENDA SIN CLAVE'],
+            ],
+            array_map(fn ($m) => [$m['fecha'], $m['fecha_cargo'], $m['naturaleza'], $m['monto'], $m['comercio']], $movs)
         );
+        $this->assertSame('COMPRA NACIONAL', $movs[0]['operacion']);
     }
 
-    public function test_sin_seccion_de_meses_no_hay_renglones(): void
+    public function test_lee_meses_sin_intereses(): void
     {
-        $estado = (new AfirmeTarjetaParser())->parsearTexto(AfirmeTarjetaFixture::texto([]));
-        $this->assertSame([], $estado['renglones']);
+        $msi = $this->parsear()['msi'];
 
-        $texto = str_replace("COMPRAS Y CARGOS DIFERIDOS A MESES SIN INTERESES\n", '', AfirmeTarjetaFixture::texto());
-        $this->assertSame([], (new AfirmeTarjetaParser())->parsearTexto($texto)['renglones']);
+        $this->assertCount(2, $msi);
+        $this->assertSame(['2026-02-11', 'TIENDA ELECTRONICA FICTICIA', 12000.00, 1], [$msi[0]['fecha'], $msi[0]['descripcion'], $msi[0]['monto_original'], $msi[0]['numero_pago']]);
+        $this->assertSame(['LIBRERIA FALSA', 500.00, 3], [$msi[1]['descripcion'], $msi[1]['pago_requerido'], $msi[1]['numero_pago']]);
     }
 
-    public function test_reporta_renglon_incompleto(): void
+    public function test_error_si_los_cargos_no_cuadran(): void
     {
-        $texto = str_replace("\$6,000.00\t\$5,000.00\t\$1,000.00\t1 0.00 %", '', AfirmeTarjetaFixture::texto());
-        $estado = (new AfirmeTarjetaParser())->parsearTexto($texto);
-        $this->assertNotEmpty($estado['errores']);
+        $estado = $this->parsear(["Cargos regulares (no a meses)\t+ $1,720.25" => "Cargos regulares (no a meses)\t+ $1,800.00"]);
+
+        $this->assertStringContainsString('suma de cargos', implode(' ', $estado['errores']));
     }
 
-    public function test_lee_los_cargos_y_abonos_regulares(): void
+    public function test_error_si_los_abonos_no_cuadran(): void
     {
-        $estado = (new AfirmeTarjetaParser())->parsearTexto(AfirmeTarjetaFixture::texto(null, true));
+        $estado = $this->parsear(["Pagos y abonos\t- $1,000.00" => "Pagos y abonos\t- $900.00"]);
 
-        $this->assertSame([], $estado['errores']);
-        $this->assertSame(2050.0, $estado['resumen']['cargos_regulares']);
-        $this->assertSame(5200.0, $estado['resumen']['pagos_abonos']);
-        $this->assertSame(
-            [['2026-03-12', 'cargo', 450.0, 'COMPRA NACIONAL', 'RESTAURANTE FICTICIO'],
-             ['2026-03-13', 'cargo', 800.0, 'COMPRA NACIONAL', 'GASOLINERA FICTICIA'],
-             ['2026-03-13', 'cargo', 800.0, 'COMPRA NACIONAL', 'GASOLINERA FICTICIA'],
-             ['2026-03-15', 'abono', 5000.0, 'PAGO ONLINE', 'PAGO ONLINE'],
-             ['2026-03-20', 'abono', 200.0, 'DEVOLUCION', 'TIENDA FICTICIA DOS']],
-            array_map(fn ($m) => [$m['fecha'], $m['naturaleza'], $m['monto'], $m['tipo'], $m['descripcion']], $estado['movimientos'])
-        );
-        $this->assertSame('2026-03-13', $estado['movimientos'][0]['fecha_cargo']);
+        $this->assertStringContainsString('suma de abonos', implode(' ', $estado['errores']));
     }
 
-    public function test_no_importa_si_los_cargos_no_cuadran_con_el_resumen(): void
+    public function test_error_si_falta_el_resumen(): void
     {
-        $texto = str_replace("Cargos regulares (no a meses)\t+ $2,050.00", "Cargos regulares (no a meses)\t+ $2,000.00", AfirmeTarjetaFixture::texto());
-        $estado = (new AfirmeTarjetaParser())->parsearTexto($texto);
+        $estado = $this->parsear(["Pagos y abonos\t- $1,000.00" => '']);
 
-        $this->assertSame(['Los cargos leídos suman $2,050.00 y el resumen indica $2,000.00 de cargos regulares.'], $estado['errores']);
+        $this->assertStringContainsString('Pagos y abonos', implode(' ', $estado['errores']));
     }
 }

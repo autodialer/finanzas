@@ -2,143 +2,111 @@
 
 namespace App\Services;
 
-use App\Models\Categoria;
 use App\Models\Cuenta;
 use App\Models\Gasto;
-use App\Models\Ingreso;
 use App\Models\Traspaso;
+use Carbon\Carbon;
 
 /**
- * Convierte los cargos y abonos regulares de la tarjeta (AfirmeTarjetaParser) en
- * filas con el mismo formato que AfirmeClasificador, para reutilizar la vista
- * previa y el guardado del importador de Cuenta Visión:
- *  - cargo            → gasto (con la categoría usada antes para el mismo comercio)
- *  - pago a la tarjeta → traspaso desde otra cuenta
- *  - otro abono        → ingreso (devoluciones, bonificaciones)
- * y marcando como duplicados los que ya están registrados.
+ * Convierte los movimientos de la tarjeta de crédito Afirme en filas para la
+ * vista previa: cargos → gasto, abonos (pagos) → traspaso desde la cuenta con
+ * la que se paga la tarjeta. Los meses sin intereses no son movimientos: se
+ * regresan aparte para conciliarlos con las compras a meses (ConciliadorComprasMeses).
  */
 class AfirmeTarjetaClasificador
 {
-    private const PATRON_COSTO = '/^(INTERES|COMISION|ANUALIDAD|IVA)/u';
-    private const PATRON_IVA   = '/^IVA\b/u';
-    private const PATRON_PAGO  = '/^PAGO/u';
+    // Tolerancia para reconocer un pago a la tarjeta que ya se registró como traspaso
+    private const DIAS_TOLERANCIA_PAGO = 5;
 
-    // Días de diferencia aceptados entre el pago en la tarjeta y el traspaso ya registrado
-    private const DIAS_PAGO = 5;
+    private array $idsUsados = ['gasto' => [], 'traspaso' => []];
 
-    private array $categoriasPorComercio = [];
-
-    public function __construct(private Cuenta $cuenta)
+    public function __construct(private Cuenta $tarjeta)
     {
     }
 
-    public function clasificar(array $movimientos): array
+    /** @return array{0: array, 1: array} filas importables y renglones de meses sin intereses */
+    public function clasificar(array $estado): array
     {
-        $filas = array_map(fn ($mov) => $this->fila($mov), $movimientos);
-        return $this->marcarDuplicados($filas);
-    }
+        $filas = [];
 
-    private function fila(array $mov): array
-    {
-        $esCargo = $mov['naturaleza'] === 'cargo';
-        $tipoMov = $mov['tipo'];
-        $esCosto = $esCargo && preg_match(self::PATRON_COSTO, $tipoMov);
-        $esPago  = !$esCargo && preg_match(self::PATRON_PAGO, $tipoMov);
+        foreach ($estado['movimientos'] as $mov) {
+            $base = [
+                'fecha'       => $mov['fecha'],
+                'fecha_cargo' => $mov['fecha_cargo'],
+                'monto'       => $mov['monto'],
+                'comercio'    => $mov['comercio'],
+                'detalle'     => $mov['descripcion'],
+            ];
 
-        [$tipo, $motivo] = match (true) {
-            $esCosto => ['gasto', 'Interés o comisión de la tarjeta'],
-            $esCargo => ['gasto', 'Compra con tarjeta'],
-            $esPago  => ['traspaso', 'Pago a la tarjeta'],
-            default  => ['ingreso', 'Abono / devolución'],
-        };
+            $filas[] = $mov['naturaleza'] === 'cargo'
+                ? AfirmeClasificador::filaBase($base + [
+                    'naturaleza' => 'retiro',
+                    'concepto'   => $mov['comercio'],
+                    'tipo'       => 'gasto',
+                    'motivo'     => 'Compra con tarjeta',
+                ])
+                : AfirmeClasificador::filaBase($base + [
+                    'naturaleza'        => 'deposito',
+                    'concepto'          => str_starts_with($mov['comercio'], 'PAGO') ? 'Pago a tarjeta Afirme' : $mov['comercio'],
+                    'tipo'              => 'traspaso',
+                    'motivo'            => 'Abono a la tarjeta',
+                    'cuenta_destino_id' => $this->cuentaOrigenPagos(),
+                ]);
+        }
 
-        return [
-            'fecha'             => $mov['fecha'],
-            'naturaleza'        => $esCargo ? 'retiro' : 'deposito',
-            'referencia'        => null,
-            'monto'             => $mov['monto'],
-            'monto_iva'         => $esCosto && preg_match(self::PATRON_IVA, $tipoMov) ? $mov['monto'] : 0,
-            'concepto'          => $esPago ? 'Pago a la tarjeta ' . $this->cuenta->nombre : mb_strimwidth($mov['descripcion'], 0, 80, '…'),
-            'detalle'           => trim("{$tipoMov} {$mov['descripcion']}") . ' (cargo ' . $mov['fecha_cargo'] . ')',
-            'tipo'              => $tipo,
-            'motivo'            => $motivo,
-            'categoria_id'      => $esCosto ? $this->categoriaComisionesId() : ($esCargo ? $this->categoriaAnterior($mov['descripcion']) : null),
-            'cuenta_destino_id' => $esPago ? $this->cuentaPagoAnterior() : null,
-            'prestamo_id'       => null,
-            'prestamo_tipo'     => null,
-            'duplicado'         => false,
-        ];
+        usort($filas, fn ($a, $b) => strcmp($a['fecha'], $b['fecha']));
+
+        return [array_map(fn ($fila) => $this->marcarDuplicado($fila), $filas), $estado['msi']];
     }
 
     /**
-     * Un cargo ya registrado es un gasto de la tarjeta con la misma fecha y monto;
-     * un pago, un traspaso hacia la tarjeta por el mismo monto en fechas cercanas
-     * (p. ej. importado desde el estado de cuenta de débito). Se cuentan las
-     * coincidencias para no perder movimientos idénticos del mismo periodo.
+     * Una compra ya registrada tiene el mismo monto con fecha entre la de
+     * operación y la de cargo (a mano se suele capturar cualquiera de las dos).
+     * Un pago ya registrado es un traspaso a la tarjeta por el mismo monto en ±5 días.
+     * Cada registro existente solo puede marcar una fila.
      */
-    private function marcarDuplicados(array $filas): array
+    private function marcarDuplicado(array $fila): array
     {
-        $disponibles = [];
-
-        foreach ($filas as &$fila) {
-            $clave = $fila['tipo'] . '|' . $fila['fecha'] . '|' . number_format($fila['monto'], 2, '.', '');
-            $disponibles[$clave] ??= $this->existentes($fila);
-
-            if ($disponibles[$clave]) {
-                $origen = array_shift($disponibles[$clave]);
-                $fila['duplicado'] = true;
-                $fila['tipo']      = 'ignorar';
-                $fila['motivo']    = $origen;
-            }
-        }
-        unset($fila);
-
-        return $filas;
-    }
-
-    /** @return string[] un motivo por cada registro existente que coincide */
-    private function existentes(array $fila): array
-    {
-        $cuentaId = $this->cuenta->id;
-
         if ($fila['tipo'] === 'traspaso') {
-            $desde = date('Y-m-d', strtotime("{$fila['fecha']} -" . self::DIAS_PAGO . ' days'));
-            $hasta = date('Y-m-d', strtotime("{$fila['fecha']} +" . self::DIAS_PAGO . ' days'));
-            return Traspaso::with('cuentaOrigen')
-                ->where('cuenta_destino_id', $cuentaId)
-                ->where('monto', $fila['monto'])
-                ->whereBetween('fecha', [$desde, $hasta])
-                ->get()
-                ->map(fn ($t) => 'Ya registrado como traspaso desde ' . ($t->cuentaOrigen->nombre ?? 'otra cuenta') . ' el ' . date('d/m/Y', strtotime($t->fecha)))
-                ->all();
+            $modelo = 'traspaso';
+            $query  = Traspaso::where('cuenta_destino_id', $this->tarjeta->id)->whereBetween('fecha', [
+                Carbon::parse($fila['fecha'])->subDays(self::DIAS_TOLERANCIA_PAGO)->toDateString(),
+                Carbon::parse($fila['fecha'])->addDays(self::DIAS_TOLERANCIA_PAGO)->toDateString(),
+            ]);
+        } else {
+            $modelo = 'gasto';
+            $query  = Gasto::where('cuenta_id', $this->tarjeta->id)->whereBetween('fecha', [$fila['fecha'], $fila['fecha_cargo']]);
         }
 
-        $modelo = $fila['tipo'] === 'ingreso' ? Ingreso::class : Gasto::class;
-        $total = $modelo::where('cuenta_id', $cuentaId)->whereDate('fecha', $fila['fecha'])->where('monto', $fila['monto'])->count();
+        $id = $query->where('monto', $fila['monto'])
+            ->whereNotIn('id', $this->idsUsados[$modelo])
+            ->orderBy('fecha')
+            ->value('id');
 
-        return array_fill(0, $total, 'Ya importado (misma fecha y monto en esta tarjeta)');
+        if ($id === null) {
+            return $fila;
+        }
+
+        $this->idsUsados[$modelo][] = $id;
+
+        return array_merge($fila, [
+            'duplicado' => true,
+            'tipo'      => 'ignorar',
+            'motivo'    => $modelo === 'traspaso'
+                ? 'Ya registrado: traspaso a la tarjeta por el mismo monto (±' . self::DIAS_TOLERANCIA_PAGO . ' días)'
+                : 'Ya registrado: gasto por el mismo monto entre la fecha de operación y la de cargo',
+        ]);
     }
 
-    // Categoría del último gasto del mismo comercio en el negocio de la tarjeta
-    private function categoriaAnterior(string $comercio): ?int
+    // La cuenta desde la que se pagó la tarjeta la última vez; si no hay, otra cuenta del mismo banco y negocio
+    private function cuentaOrigenPagos(): ?int
     {
-        return $this->categoriasPorComercio[$comercio] ??= Gasto::where('negocio_id', $this->cuenta->negocio_id)
-            ->where('concepto', mb_strimwidth($comercio, 0, 80, '…'))
-            ->latest('fecha')
-            ->value('categoria_id');
-    }
-
-    // Cuenta desde la que se pagó la tarjeta la última vez
-    private function cuentaPagoAnterior(): ?int
-    {
-        return once(fn () => Traspaso::where('cuenta_destino_id', $this->cuenta->id)->latest('fecha')->value('cuenta_origen_id'));
-    }
-
-    private function categoriaComisionesId(): ?int
-    {
-        return once(fn () => Categoria::whereIn('tipo', ['gasto', 'ambos'])
-            ->where('nombre', 'like', '%comision%')
-            ->orderBy('id')
-            ->value('id'));
+        return once(fn () => Traspaso::where('cuenta_destino_id', $this->tarjeta->id)->orderByDesc('fecha')->value('cuenta_origen_id')
+            ?? Cuenta::where('negocio_id', $this->tarjeta->negocio_id)
+                ->where('tipo', 'banco')
+                ->where('id', '!=', $this->tarjeta->id)
+                ->when($this->tarjeta->banco_id, fn ($q) => $q->where('banco_id', $this->tarjeta->banco_id))
+                ->orderBy('id')
+                ->value('id'));
     }
 }

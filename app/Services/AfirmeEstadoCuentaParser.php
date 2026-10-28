@@ -2,8 +2,6 @@
 
 namespace App\Services;
 
-use Smalot\PdfParser\Parser;
-
 /**
  * Lee el estado de cuenta en PDF de Banca Afirme (Cuenta Visión).
  *
@@ -24,18 +22,14 @@ class AfirmeEstadoCuentaParser
 
     public function parsearPdf(string $ruta): array
     {
-        return $this->parsearTexto($this->extraerTexto($ruta));
+        return $this->parsearTexto((new PdfTexto())->extraer($ruta));
     }
 
-    public function extraerTexto(string $ruta): string
+    // ¿El texto es de un estado de cuenta Cuenta Visión?
+    public static function reconoce(string $texto): bool
     {
-        $pdf = (new Parser())->parseFile($ruta);
-
-        $texto = '';
-        foreach ($pdf->getPages() as $pagina) {
-            $texto .= $pagina->getText() . "\n";
-        }
-        return $texto;
+        return (bool) preg_match('/CUENTA VISI[ÓO]N/u', $texto)
+            && (bool) preg_match('/DETALLE DE OPERACIONES/u', $texto);
     }
 
     /**
@@ -77,6 +71,7 @@ class AfirmeEstadoCuentaParser
         }
 
         return [
+            'tipo'           => 'vision',
             'periodo_inicio' => $periodo ? $periodo['inicio']->format('Y-m-d') : null,
             'periodo_fin'    => $periodo ? $periodo['fin']->format('Y-m-d') : null,
             'clabe'          => $clabe,
