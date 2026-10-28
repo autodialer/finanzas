@@ -66,6 +66,7 @@
                     <li>Antes de continuar se verifica que saldo inicial + depósitos − retiros dé el saldo al corte. Si no cuadra, no se importa.</li>
                     <li>Verás una vista previa con un tipo sugerido para cada movimiento. Nada se guarda hasta que confirmes.</li>
                     <li>Los movimientos ya importados (misma fecha, referencia y monto) se marcan para no duplicarlos.</li>
+                    <li>Si subes el estado de cuenta de la <strong>tarjeta de crédito</strong> Afirme, se lee la sección de <strong>compras a meses sin intereses</strong>: se comparan con tus compras a meses registradas y puedes dar de alta las que falten.</li>
                 </ul>
             </div>
         </div>

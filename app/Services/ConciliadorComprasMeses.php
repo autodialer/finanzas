@@ -9,13 +9,14 @@ use Carbon\Carbon;
 /**
  * Compara un renglón de la sección de meses sin intereses del estado de cuenta
  * de la tarjeta con los planes registrados:
- *  - pago 1           → sugerir dar de alta la compra (gasto + plan)
- *  - pago > 1 con plan → verificar número de pago y saldo pendiente
- *  - pago > 1 sin plan → sugerir el alta con la fecha de compra estimada
+ *  - con plan          → verificar número de pago, mensualidad y saldo pendiente
+ *  - pago 1 sin plan   → sugerir dar de alta la compra (gasto + plan)
+ *  - pago > 1 sin plan → ofrecer el alta con la fecha de compra estimada
  *
- * El renglón trae: descripcion, monto_original, numero_pago, total_pagos,
- * mensualidad (opcional), saldo_pendiente (opcional, después del pago) y fecha
- * (del cargo o del corte).
+ * El renglón trae (ver AfirmeTarjetaParser): descripcion, monto_original,
+ * numero_pago, total_pagos, mensualidad y saldo_pendiente (opcionales; el saldo
+ * es el que queda después del pago del periodo), fecha del cargo y, si se
+ * conoce, periodo_inicio / periodo_fin del estado de cuenta.
  */
 class ConciliadorComprasMeses
 {
@@ -30,19 +31,18 @@ class ConciliadorComprasMeses
 
     public function conciliar(array $renglon): array
     {
-        $numero = (int) $renglon['numero_pago'];
+        $numero = max((int) $renglon['numero_pago'], 1);
         $fecha  = Carbon::parse($renglon['fecha']);
 
-        if ($numero <= 1) {
-            return $this->resultado(self::CREAR, $renglon, null, [], $fecha);
+        [$compra, $avisos] = $this->buscarPlan($renglon['descripcion'], (float) $renglon['monto_original']);
+        if ($compra) {
+            $avisos = array_merge($avisos, $this->verificar($compra, $renglon, $numero, $fecha));
+            return $this->resultado($avisos ? self::DIFERENCIA : self::VERIFICADA, $renglon, $compra, $avisos, $compra->fecha_primer_cargo);
         }
 
-        $compra = $this->buscarPlan($renglon['descripcion'], (float) $renglon['monto_original']);
-        if (!$compra) {
-            return $this->resultado(self::SIN_PLAN, $renglon, null, [], $fecha->copy()->subMonthsNoOverflow($numero - 1));
-        }
-
-        return $this->resultado(...$this->verificar($compra, $renglon, $numero, $fecha));
+        return $numero === 1
+            ? $this->resultado(self::CREAR, $renglon, null, [], $fecha)
+            : $this->resultado(self::SIN_PLAN, $renglon, null, [], $fecha->copy()->subMonthsNoOverflow($numero - 1));
     }
 
     private function verificar(CompraMeses $compra, array $renglon, int $numero, Carbon $fecha): array
@@ -53,17 +53,27 @@ class ConciliadorComprasMeses
             $avisos[] = "El banco indica {$renglon['total_pagos']} meses y el plan tiene {$compra->meses}.";
         }
 
-        // El cargo número $numero del plan debe caer en el mes del estado de cuenta
+        // El cargo número $numero del plan debe caer en el periodo del estado de cuenta
+        // (o, si no se conoce el periodo, en el mismo mes que el cargo del banco)
+        $enPeriodo = !empty($renglon['periodo_inicio']) && !empty($renglon['periodo_fin'])
+            ? fn ($c) => $c['fecha']->between(Carbon::parse($renglon['periodo_inicio'])->startOfDay(), Carbon::parse($renglon['periodo_fin'])->endOfDay())
+            : fn ($c) => $c['fecha']->format('Y-m') === $fecha->format('Y-m');
+
         $cargo = $compra->calendario->firstWhere('numero', $numero);
         if (!$cargo) {
             $avisos[] = "El banco indica el pago {$numero} pero el plan solo tiene {$compra->meses} mensualidades.";
-        } elseif ($cargo['fecha']->format('Y-m') !== $fecha->format('Y-m')) {
-            $esperado = $compra->calendario->first(fn ($c) => $c['fecha']->format('Y-m') === $fecha->format('Y-m'));
-            $avisos[] = "El banco indica el pago {$numero}; según el plan este mes toca el pago "
-                . ($esperado ? $esperado['numero'] : 'ninguno') . '.';
+        } elseif (!$enPeriodo($cargo)) {
+            $esperados = $compra->calendario->filter($enPeriodo)->pluck('numero');
+            $avisos[] = "El banco indica el pago {$numero}; según el plan en este periodo toca el pago "
+                . ($esperados->isNotEmpty() ? $esperados->implode(' y ') : 'ninguno') . '.';
         }
 
-        if (isset($renglon['saldo_pendiente']) && $renglon['saldo_pendiente'] !== null) {
+        if ($cargo && isset($renglon['mensualidad']) && abs($cargo['monto'] - (float) $renglon['mensualidad']) > 0.01) {
+            $avisos[] = 'Mensualidad: banco $' . number_format((float) $renglon['mensualidad'], 2)
+                . ', plan $' . number_format($cargo['monto'], 2) . '.';
+        }
+
+        if (isset($renglon['saldo_pendiente'])) {
             $saldoPlan = round($compra->calendario->slice($numero)->sum('monto'), 2);
             if (abs($saldoPlan - (float) $renglon['saldo_pendiente']) > 0.01) {
                 $avisos[] = 'Saldo pendiente: banco $' . number_format((float) $renglon['saldo_pendiente'], 2)
@@ -71,7 +81,7 @@ class ConciliadorComprasMeses
             }
         }
 
-        return [$avisos ? self::DIFERENCIA : self::VERIFICADA, $renglon, $compra, $avisos, $compra->fecha_primer_cargo];
+        return $avisos;
     }
 
     private function resultado(string $accion, array $renglon, ?CompraMeses $compra, array $avisos, Carbon $primerCargo): array
@@ -83,8 +93,8 @@ class ConciliadorComprasMeses
             'accion'    => $accion,
             'compra_id' => $compra?->id,
             'avisos'    => $avisos,
-            // Datos para dar de alta el plan cuando no existe. Sin fecha de operación
-            // en el estado de cuenta, la fecha de compra se estima con el primer cargo.
+            // Datos para dar de alta el plan cuando no existe. El estado de cuenta no
+            // trae la fecha de compra: se estima con la del primer cargo.
             'sugerencia' => $compra ? null : [
                 'cuenta_id'          => $this->cuenta->id,
                 'descripcion'        => trim($renglon['descripcion']),
@@ -97,19 +107,32 @@ class ConciliadorComprasMeses
         ];
     }
 
-    private function buscarPlan(string $descripcion, float $monto): ?CompraMeses
+    /** @return array{0: ?CompraMeses, 1: array} el plan encontrado y avisos de la búsqueda */
+    private function buscarPlan(string $descripcion, float $monto): array
     {
         $buscada = self::normalizar($descripcion);
 
-        return CompraMeses::where('cuenta_id', $this->cuenta->id)
+        $candidatas = CompraMeses::where('cuenta_id', $this->cuenta->id)
             ->whereBetween('monto_original', [$monto - 0.01, $monto + 0.01])
-            ->get()
-            ->first(function ($compra) use ($buscada) {
-                // El banco suele recortar la descripción: basta con que una contenga a la otra
-                $propia = self::normalizar($compra->descripcion);
-                return $propia !== '' && $buscada !== ''
-                    && (str_contains($propia, $buscada) || str_contains($buscada, $propia));
-            });
+            ->get();
+
+        // El banco suele recortar la descripción: basta con que una contenga a la otra
+        $porDescripcion = $candidatas->first(function ($compra) use ($buscada) {
+            $propia = self::normalizar($compra->descripcion);
+            return $propia !== '' && $buscada !== ''
+                && (str_contains($propia, $buscada) || str_contains($buscada, $propia));
+        });
+        if ($porDescripcion) {
+            return [$porDescripcion, []];
+        }
+
+        // Si la descripción se capturó distinta pero solo hay un plan con ese monto en la tarjeta
+        if ($candidatas->count() === 1) {
+            $compra = $candidatas->first();
+            return [$compra, ["La descripción no coincide (plan: \"{$compra->descripcion}\"); se empató por monto original."]];
+        }
+
+        return [null, []];
     }
 
     public static function normalizar(string $texto): string

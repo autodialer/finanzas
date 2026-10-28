@@ -5,9 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Categoria;
 use App\Models\CompraMeses;
 use App\Models\Cuenta;
-use App\Models\Gasto;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 // Compras a meses sin intereses: un gasto por el monto original + el plan de mensualidades.
 class CompraMesesController extends Controller
@@ -39,10 +38,7 @@ class CompraMesesController extends Controller
     {
         [$cuenta, $datos] = $this->validar($request);
 
-        $compra = DB::transaction(function () use ($cuenta, $datos, $request) {
-            $gasto = Gasto::create($this->datosGasto($cuenta, $datos, $request) + ['user_id' => auth()->id()]);
-            return CompraMeses::create($datos + ['gasto_id' => $gasto->id]);
-        });
+        $compra = CompraMeses::registrar($cuenta, $datos, (int) $request->categoria_id, $request->boolean('tiene_iva'), auth()->id());
 
         return redirect()->route('compras-meses.show', $compra)->with('exito', 'Compra a meses registrada correctamente.');
     }
@@ -68,10 +64,7 @@ class CompraMesesController extends Controller
         $this->autorizar($compra);
         [$cuenta, $datos] = $this->validar($request);
 
-        DB::transaction(function () use ($compra, $cuenta, $datos, $request) {
-            $compra->gasto->update($this->datosGasto($cuenta, $datos, $request));
-            $compra->update($datos);
-        });
+        $compra->actualizar($cuenta, $datos, (int) $request->categoria_id, $request->boolean('tiene_iva'));
 
         return redirect()->route('compras-meses.show', $compra)->with('exito', 'Compra a meses actualizada correctamente.');
     }
@@ -137,15 +130,11 @@ class CompraMesesController extends Controller
             abort(403, 'No tienes permiso para usar esta cuenta.');
         }
 
-        // La última mensualidad absorbe el redondeo; si se aleja más de $1 la mensualidad no cuadra
         $monto = (float) $request->monto_original;
         $meses = (int) $request->meses;
         $mensualidad = round((float) $request->mensualidad, 2);
-        $ultima = $monto - $mensualidad * ($meses - 1);
-        if ($ultima <= 0 || abs($ultima - $mensualidad) > 1) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'mensualidad' => 'La mensualidad no cuadra con el monto y los meses (sugerida: $' . number_format($monto / $meses, 2) . ').',
-            ]);
+        if ($error = CompraMeses::errorMensualidad($monto, $meses, $mensualidad)) {
+            throw ValidationException::withMessages(['mensualidad' => $error]);
         }
 
         return [$cuenta, [
@@ -158,24 +147,5 @@ class CompraMesesController extends Controller
             'fecha_primer_cargo' => $request->fecha_primer_cargo,
             'notas'              => $request->notas,
         ]];
-    }
-
-    // El gasto refleja la compra completa en la fecha de compra, cargada a la tarjeta
-    private function datosGasto(Cuenta $cuenta, array $datos, Request $request): array
-    {
-        $tieneIva = $request->boolean('tiene_iva');
-
-        return [
-            'negocio_id'   => $cuenta->negocio_id,
-            'categoria_id' => $request->categoria_id,
-            'cuenta_id'    => $cuenta->id,
-            'monto'        => $datos['monto_original'],
-            'fecha'        => $datos['fecha_compra'],
-            'concepto'     => "{$datos['descripcion']} ({$datos['meses']} MSI)",
-            'forma_pago'   => 'tarjeta',
-            'notas'        => $datos['notas'],
-            'tiene_iva'    => $tieneIva,
-            'monto_iva'    => $tieneIva ? round($datos['monto_original'] * 16 / 116, 2) : 0,
-        ];
     }
 }

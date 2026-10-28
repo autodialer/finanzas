@@ -5,6 +5,7 @@ namespace App\Models;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
 
 /**
@@ -35,6 +36,54 @@ class CompraMeses extends Model
     public function cuenta()
     {
         return $this->belongsTo(Cuenta::class);
+    }
+
+    /**
+     * Crea el gasto por el monto original (fecha de compra, cargado a la tarjeta)
+     * y el plan ligado a él. $datos son los campos del plan, sin gasto_id.
+     */
+    public static function registrar(Cuenta $cuenta, array $datos, int $categoriaId, bool $tieneIva, ?int $userId, ?string $notasGasto = null): self
+    {
+        return DB::transaction(function () use ($cuenta, $datos, $categoriaId, $tieneIva, $userId, $notasGasto) {
+            $gasto = Gasto::create(self::datosGasto($cuenta, $datos, $categoriaId, $tieneIva, $notasGasto) + ['user_id' => $userId]);
+            return self::create($datos + ['gasto_id' => $gasto->id]);
+        });
+    }
+
+    public function actualizar(Cuenta $cuenta, array $datos, int $categoriaId, bool $tieneIva): void
+    {
+        DB::transaction(function () use ($cuenta, $datos, $categoriaId, $tieneIva) {
+            $this->gasto->update(self::datosGasto($cuenta, $datos, $categoriaId, $tieneIva));
+            $this->update($datos);
+        });
+    }
+
+    private static function datosGasto(Cuenta $cuenta, array $datos, int $categoriaId, bool $tieneIva, ?string $notas = null): array
+    {
+        $monto = (float) $datos['monto_original'];
+
+        return [
+            'negocio_id'   => $cuenta->negocio_id,
+            'categoria_id' => $categoriaId,
+            'cuenta_id'    => $cuenta->id,
+            'monto'        => $monto,
+            'fecha'        => $datos['fecha_compra'],
+            'concepto'     => "{$datos['descripcion']} ({$datos['meses']} MSI)",
+            'forma_pago'   => 'tarjeta',
+            'notas'        => $notas ?? ($datos['notas'] ?? null),
+            'tiene_iva'    => $tieneIva,
+            'monto_iva'    => $tieneIva ? round($monto * 16 / 116, 2) : 0,
+        ];
+    }
+
+    // La última mensualidad absorbe el redondeo; si se aleja más de $1 la mensualidad no cuadra
+    public static function errorMensualidad(float $monto, int $meses, float $mensualidad): ?string
+    {
+        $ultima = $monto - $mensualidad * ($meses - 1);
+        if ($meses < 1 || $ultima <= 0 || abs($ultima - $mensualidad) > 1) {
+            return 'La mensualidad no cuadra con el monto y los meses (sugerida: $' . number_format($monto / max($meses, 1), 2) . ').';
+        }
+        return null;
     }
 
     /**

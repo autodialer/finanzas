@@ -60,6 +60,8 @@ Route::middleware('auth')->group(function () {
     Route::post('importar-afirme', [ImportacionAfirmeController::class, 'analizar'])->name('importacion-afirme.analizar');
     Route::get('importar-afirme/vista-previa', [ImportacionAfirmeController::class, 'preview'])->name('importacion-afirme.preview');
     Route::post('importar-afirme/confirmar', [ImportacionAfirmeController::class, 'confirmar'])->name('importacion-afirme.confirmar');
+    Route::get('importar-afirme/tarjeta', [ImportacionAfirmeController::class, 'previewTarjeta'])->name('importacion-afirme.tarjeta');
+    Route::post('importar-afirme/tarjeta/confirmar', [ImportacionAfirmeController::class, 'confirmarTarjeta'])->name('importacion-afirme.tarjeta.confirmar');
     Route::post('importar-afirme/cancelar', [ImportacionAfirmeController::class, 'cancelar'])->name('importacion-afirme.cancelar');
     Route::resource('compras-meses', CompraMesesController::class)->parameters(['compras-meses' => 'compra']);
     Route::resource('traspasos', TraspasoController::class)->only(['index', 'create', 'store', 'destroy']);
