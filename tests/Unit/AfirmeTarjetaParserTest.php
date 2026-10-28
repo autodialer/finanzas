@@ -63,4 +63,30 @@ class AfirmeTarjetaParserTest extends TestCase
         $estado = (new AfirmeTarjetaParser())->parsearTexto($texto);
         $this->assertNotEmpty($estado['errores']);
     }
+
+    public function test_lee_los_cargos_y_abonos_regulares(): void
+    {
+        $estado = (new AfirmeTarjetaParser())->parsearTexto(AfirmeTarjetaFixture::texto(null, true));
+
+        $this->assertSame([], $estado['errores']);
+        $this->assertSame(2050.0, $estado['resumen']['cargos_regulares']);
+        $this->assertSame(5200.0, $estado['resumen']['pagos_abonos']);
+        $this->assertSame(
+            [['2026-03-12', 'cargo', 450.0, 'COMPRA NACIONAL', 'RESTAURANTE FICTICIO'],
+             ['2026-03-13', 'cargo', 800.0, 'COMPRA NACIONAL', 'GASOLINERA FICTICIA'],
+             ['2026-03-13', 'cargo', 800.0, 'COMPRA NACIONAL', 'GASOLINERA FICTICIA'],
+             ['2026-03-15', 'abono', 5000.0, 'PAGO ONLINE', 'PAGO ONLINE'],
+             ['2026-03-20', 'abono', 200.0, 'DEVOLUCION', 'TIENDA FICTICIA DOS']],
+            array_map(fn ($m) => [$m['fecha'], $m['naturaleza'], $m['monto'], $m['tipo'], $m['descripcion']], $estado['movimientos'])
+        );
+        $this->assertSame('2026-03-13', $estado['movimientos'][0]['fecha_cargo']);
+    }
+
+    public function test_no_importa_si_los_cargos_no_cuadran_con_el_resumen(): void
+    {
+        $texto = str_replace("Cargos regulares (no a meses)\t+ $2,050.00", "Cargos regulares (no a meses)\t+ $2,000.00", AfirmeTarjetaFixture::texto());
+        $estado = (new AfirmeTarjetaParser())->parsearTexto($texto);
+
+        $this->assertSame(['Los cargos leídos suman $2,050.00 y el resumen indica $2,000.00 de cargos regulares.'], $estado['errores']);
+    }
 }

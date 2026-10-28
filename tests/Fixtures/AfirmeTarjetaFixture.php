@@ -21,10 +21,26 @@ class AfirmeTarjetaFixture
         ];
     }
 
-    public static function texto(?array $renglones = null, bool $partirPagina = false): string
+    /** Cargos y abonos regulares: [tipo, comercio, fecha operación, fecha cargo, signo, monto] */
+    public static function movimientos(): array
     {
-        $renglones ??= self::renglones();
-        $total = array_sum(array_map(fn ($r) => (float) str_replace(',', '', $r[4]), $renglones));
+        return [
+            ['COMPRA NACIONAL', 'RESTAURANTE FICTICIO', '12-MAR-2026', '13-MAR-2026', '+', '450.00'],
+            ['COMPRA NACIONAL', 'GASOLINERA FICTICIA', '13-MAR-2026', '14-MAR-2026', '+', '800.00'],
+            ['COMPRA NACIONAL', 'GASOLINERA FICTICIA', '13-MAR-2026', '14-MAR-2026', '+', '800.00'],
+            ['PAGO ONLINE', null, '15-MAR-2026', '15-MAR-2026', '-', '5,000.00'],
+            ['DEVOLUCION', 'TIENDA FICTICIA DOS', '20-MAR-2026', '21-MAR-2026', '-', '200.00'],
+        ];
+    }
+
+    public static function texto(?array $renglones = null, bool $partirPagina = false, ?array $movimientos = null): string
+    {
+        $renglones   ??= self::renglones();
+        $movimientos ??= self::movimientos();
+        $importe = fn (string $v) => (float) str_replace(',', '', $v);
+        $total   = array_sum(array_map(fn ($r) => $importe($r[4]), $renglones));
+        $cargos  = array_sum(array_map(fn ($m) => $m[4] === '+' ? $importe($m[5]) : 0, $movimientos));
+        $abonos  = array_sum(array_map(fn ($m) => $m[4] === '-' ? $importe($m[5]) : 0, $movimientos));
 
         $encabezadoPagina = fn (int $n) => [
             '000-000',
@@ -41,10 +57,17 @@ class AfirmeTarjetaFixture
             "Período:\t10-MAR-2026 al 10-ABR-2026",
             "Fecha de corte:\t10-ABR-2026",
             'RESUMEN DE CARGOS Y ABONOS DEL PERIODO',
-            "Cargos regulares (no a meses)\t+ $1,234.00",
+            'Adeudo del periodo anterior	= $5,000.00',
+            "Cargos regulares (no a meses)\t+ $" . number_format($cargos, 2),
             'Cargos y compras a meses (capital)',
             '7',
             '+ $' . number_format($total, 2),
+            'Monto de intereses',
+            '8',
+            '+ $0.00',
+            "Monto de comisiones\t+ $0.00",
+            "IVA de intereses y comisiones\t+ $0.00",
+            "Pagos y abonos\t- $" . number_format($abonos, 2),
             ...$encabezadoPagina(2),
             'DESGLOSE DE MOVIMIENTOS',
             'COMPRAS Y CARGOS DIFERIDOS A MESES SIN INTERESES',
@@ -61,12 +84,26 @@ class AfirmeTarjetaFixture
             array_push($lineas, $fecha, 'MESES SIN INTERESES', $comercio, "\${$original}\t\${$saldo}\t\${$pago}\t{$numero} 0.00 %");
         }
 
+        $encabezadoRegulares = ['CARGOS, ABONOS Y COMPRAS REGULARES (NO A MESES)', 'Tarjeta titular ' . self::TARJETA,
+            'Fecha', 'de la', 'operación', 'Fecha', 'de', 'cargo', "Descripción del movimiento\tMonto"];
+        array_push($lineas, ...$encabezadoRegulares);
+
+        foreach ($movimientos as $n => [$tipo, $comercio, $operacion, $cargo, $signo, $monto]) {
+            if ($partirPagina && $n === 2) {
+                array_push($lineas, ...[...$encabezadoPagina(3), ...$encabezadoRegulares]);
+            }
+            $importeLinea = "{$operacion}\t{$cargo}\t{$signo} \${$monto}";
+            // Una descripción de una sola línea viene pegada a la fecha, como en el PDF
+            $comercio === null
+                ? $lineas[] = $tipo . $importeLinea
+                : array_push($lineas, $tipo, $comercio, $importeLinea);
+        }
+
         array_push($lineas,
-            'CARGOS, ABONOS Y COMPRAS REGULARES (NO A MESES)',
-            'Tarjeta titular ' . self::TARJETA,
-            'COMPRA NACIONAL',
-            'RESTAURANTE FICTICIO',
-            "12-MAR-2026\t13-MAR-2026\t+ $1,234.00",
+            "Total de cargos:\t+\$" . number_format($cargos + $total, 2),
+            "Total de abonos:\t- \$" . number_format($abonos, 2),
+            'CARGOS NO RECONOCIDOS',
+            'Fecha',
         );
 
         return implode("\n", $lineas) . "\n";

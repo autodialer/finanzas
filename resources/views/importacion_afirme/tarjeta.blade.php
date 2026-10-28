@@ -15,7 +15,7 @@
 
 @section('contenido')
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4>Compras a meses — {{ $importacion['archivo'] }}</h4>
+    <h4>Tarjeta Afirme — {{ $importacion['archivo'] }}</h4>
     <form action="{{ route('importacion-afirme.cancelar') }}" method="POST">
         @csrf
         <button class="btn btn-secondary btn-sm"><i class="bi bi-x-lg"></i> Cancelar</button>
@@ -54,16 +54,24 @@
         <strong>Tarjeta:</strong> {{ $cuenta->nombre }} — {{ $cuenta->negocio->nombre ?? '' }} ·
         <strong>Período:</strong> {{ \Carbon\Carbon::parse($estado['periodo_inicio'])->format('d/m/Y') }} al {{ \Carbon\Carbon::parse($estado['periodo_fin'])->format('d/m/Y') }} ·
         <strong>Mensualidades del periodo:</strong> ${{ number_format($sumaMensualidades, 2) }}
-        <div class="text-muted mt-1">
-            Aquí solo se dan de alta compras a meses (un gasto por el monto original + su plan). Las mensualidades no son gastos:
-            se pagan con el traspaso a la tarjeta. El estado de cuenta no trae la fecha de compra: se propone la del primer cargo.
-        </div>
+        <table class="table table-sm mb-0 mt-2" style="max-width: 520px">
+            <tr><td>Cargos regulares (no a meses)</td><td class="text-end text-danger">${{ number_format($estado['resumen']['cargos_regulares'] ?? 0, 2) }}</td></tr>
+            <tr><td>Pagos y abonos</td><td class="text-end text-success">${{ number_format($estado['resumen']['pagos_abonos'] ?? 0, 2) }}
+                <span class="badge bg-success ms-1"><i class="bi bi-check-lg"></i> Cuadra</span></td></tr>
+            <tr class="text-muted"><td>Duplicados detectados</td><td class="text-end">{{ collect($movimientos)->where('duplicado', true)->count() }}</td></tr>
+        </table>
     </div>
 </div>
 
 <form action="{{ route('importacion-afirme.tarjeta.confirmar') }}" method="POST">
     @csrf
-    <div class="card">
+    @if($filas)
+    <h5 class="mt-2">Compras a meses sin intereses</h5>
+    <p class="small text-muted mb-2">
+        Cada compra a meses es un gasto por el monto original + su plan. Las mensualidades no son gastos: se pagan con el
+        traspaso a la tarjeta. El estado de cuenta no trae la fecha de compra: se propone la del primer cargo.
+    </p>
+    <div class="card mb-4">
         <div class="table-responsive">
             <table class="table table-sm align-middle mb-0">
                 <thead class="table-light">
@@ -120,7 +128,7 @@
                                 <div class="col-12">
                                     <select name="filas[{{ $i }}][categoria_id]" class="form-select form-select-sm">
                                         <option value="">Categoría del gasto...</option>
-                                        @foreach($categorias as $categoria)
+                                        @foreach($categoriasGasto as $categoria)
                                             <option value="{{ $categoria->id }}" @selected(old("filas.$i.categoria_id") == $categoria->id)>{{ $categoria->nombre }}</option>
                                         @endforeach
                                     </select>
@@ -151,10 +159,25 @@
                 </tbody>
             </table>
         </div>
+    </div>
+    @endif
+
+    @if($movimientos)
+    <h5>Cargos y abonos regulares (no a meses)</h5>
+    <p class="small text-muted mb-2">
+        Los cargos se registran como gastos de la tarjeta (con la categoría usada antes para el mismo comercio, si existe).
+        Los pagos a la tarjeta son traspasos desde la cuenta con la que pagaste; si ya los registraste desde el estado de cuenta de débito, aparecen como duplicados.
+    </p>
+    @endif
+
+    <div class="card">
+        @if($movimientos)
+            @include('importacion_afirme._movimientos', ['campo' => 'movimientos', 'filas' => $movimientos])
+        @endif
         <div class="card-footer d-flex justify-content-between align-items-center">
-            <span class="small text-muted">Solo se guardan las filas en "Dar de alta". Nada se guarda hasta que confirmes.</span>
+            <span class="small text-muted">Las filas en "Ignorar" no se guardan. Nada se guarda hasta que confirmes.</span>
             <button type="submit" class="btn btn-success">
-                <i class="bi bi-check-lg me-1"></i>Confirmar
+                <i class="bi bi-check-lg me-1"></i>Confirmar importación
             </button>
         </div>
     </div>
