@@ -82,6 +82,31 @@ class AmexParserTest extends TestCase
         $this->assertSame(['2025-12-28', '2025-12-28', 99.5, 'OXXO01'], [$oxxo['fecha'], $oxxo['fecha_cargo'], $oxxo['monto'], $oxxo['referencia']]);
     }
 
+    private const SALTO_DE_PAGINA = "\nEstado de Cuenta\nPágina 9\nNúmero de Cuenta FechaSiguiente Fecha\nTarjetahabiente\t3700-000000-01111 de Corte de Corte\n"
+        . "PERSONA TITULAR FICTICIA\t22-Ene-2026 22-Feb-2026 \nFecha y Detalle de las operaciones\tImporte en MN.\n";
+
+    public function test_salto_de_pagina_completa_la_mensualidad_del_ultimo_movimiento(): void
+    {
+        // "CARGO 05 DE 12" y su RFC quedan al inicio de la página siguiente, después del monto
+        $estado = $this->parsear(["LIBRERIA INVENTADA      MONTERREY\nCARGO 05 DE 12\nRFCBBB010101BB2 /REFMSI005\n250.00"
+            => "LIBRERIA INVENTADA      MONTERREY\t250.00" . self::SALTO_DE_PAGINA . "CARGO 05 DE 12\nRFCBBB010101BB2 /REFMSI005"]);
+
+        $this->assertSame([], $estado['errores']);
+        $libreria = $this->movimiento($estado, 'LIBRERIA');
+        $this->assertSame(['mensualidad', ['numero' => 5, 'total' => 12], 'MSI005'], [$libreria['clase'], $libreria['mensualidad'], $libreria['referencia']]);
+        $this->assertSame('MSI005', $estado['msi'][0]['referencia']);
+    }
+
+    public function test_salto_de_pagina_completa_la_moneda_del_ultimo_movimiento(): void
+    {
+        $estado = $this->parsear(["SERVICIO NUBE FALSO     SAN FRANCISCO\nDólar U.S.A.         10.00\n180.00"
+            => "SERVICIO NUBE FALSO     SAN FRANCISCO\t180.00" . self::SALTO_DE_PAGINA . "Dólar U.S.A.         10.00"]);
+
+        $this->assertSame([], $estado['errores']);
+        $nube = $this->movimiento($estado, 'SERVICIO NUBE');
+        $this->assertSame(['USD', 10.0, 180.0], [$nube['moneda'], $nube['monto_moneda'], $nube['monto']]);
+    }
+
     public function test_moneda_extranjera_en_el_formato_de_cada_moneda(): void
     {
         $estado = $this->parsear();
@@ -92,6 +117,7 @@ class AmexParserTest extends TestCase
         $this->assertSame(['JPY', 2500.0], [$this->movimiento($estado, 'TIENDA JAPON')['moneda'], $this->movimiento($estado, 'TIENDA JAPON')['monto_moneda']]);
         $this->assertSame(2000.0, AmexParser::montoMoneda('2,000.00'));
         $this->assertSame(100.15, AmexParser::montoMoneda('100,15'));
+        $this->assertSame(391.87, AmexParser::montoMoneda('391,87'));
     }
 
     public function test_lee_meses_sin_intereses_y_los_empareja_con_su_cargo(): void

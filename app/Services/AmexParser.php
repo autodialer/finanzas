@@ -193,6 +193,17 @@ class AmexParser
                 if ($actual['rfc'] && !str_contains($movimientos[$ultimo]['detalle'], $actual['rfc'])) {
                     $movimientos[$ultimo]['detalle'] .= " {$actual['rfc']}";
                 }
+                // "CARGO 03 DE 06" o la moneda extranjera también pueden quedar al inicio de la página siguiente
+                if ($actual['mensualidad'] && $movimientos[$ultimo]['clase'] === 'compra') {
+                    $movimientos[$ultimo]['mensualidad'] = $actual['mensualidad'];
+                    $movimientos[$ultimo]['clase'] = 'mensualidad';
+                    $movimientos[$ultimo]['detalle'] .= sprintf(' · CARGO %02d DE %02d', $actual['mensualidad']['numero'], $actual['mensualidad']['total']);
+                }
+                if ($actual['moneda'] && $movimientos[$ultimo]['moneda'] === null) {
+                    $movimientos[$ultimo]['moneda'] = $actual['moneda'];
+                    $movimientos[$ultimo]['monto_moneda'] = $actual['monto_moneda'];
+                    $movimientos[$ultimo]['detalle'] .= " · {$actual['moneda_texto']}";
+                }
             }
             $actual = $this->nuevoBloque();
         };
@@ -294,7 +305,9 @@ class AmexParser
                 $actual['mensualidad'] = ['numero' => (int) $m[1], 'total' => (int) $m[2]];
                 continue;
             }
-            if ($actual['descripcion'] && preg_match('/^([A-Za-zÁÉÍÓÚáéíóúÑñ .]+?)\s{2,}(\d[\d.,]*)$/u', $resto, $m)) {
+            // Renglón de moneda extranjera; sin descripción previa (salto de página) solo si es una moneda conocida
+            if (preg_match('/^([A-Za-zÁÉÍÓÚáéíóúÑñ .]+?)\s{2,}(\d[\d.,]*)$/u', $resto, $m)
+                && ($actual['descripcion'] || isset(self::MONEDAS[mb_strtoupper(trim($m[1]))]))) {
                 $nombre = mb_strtoupper(trim($m[1]));
                 $actual['moneda'] = self::MONEDAS[$nombre] ?? trim($m[1]);
                 $actual['monto_moneda'] = self::montoMoneda($m[2]);
