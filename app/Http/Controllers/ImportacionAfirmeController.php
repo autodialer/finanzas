@@ -11,17 +11,19 @@ use App\Models\Prestamo;
 use App\Models\Traspaso;
 use App\Services\AfirmeClasificador;
 use App\Services\AfirmeEstadoCuentaParser;
-use App\Services\AfirmeTarjetaClasificador;
 use App\Services\AfirmeTarjetaParser;
+use App\Services\AmexParser;
 use App\Services\BanregioTarjetaParser;
 use App\Services\ConciliadorComprasMeses;
 use App\Services\PdfTexto;
 use App\Services\SugeridorCategoria;
+use App\Services\TarjetaCreditoClasificador;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
-// Importa estados de cuenta en PDF de Afirme (Cuenta Visión o tarjeta de crédito) y de la tarjeta de crédito Banregio: subir → vista previa → confirmar.
+// Importa estados de cuenta en PDF de Afirme (Cuenta Visión o tarjeta de crédito), de la tarjeta de crédito
+// Banregio y de American Express: subir → vista previa → confirmar. El tipo se detecta por su contenido.
 class ImportacionAfirmeController extends Controller
 {
     private const SESION = 'importacion_afirme';
@@ -32,7 +34,7 @@ class ImportacionAfirmeController extends Controller
 
     public function create()
     {
-        $cuentas = $this->cuentasAfirme();
+        $cuentas = $this->cuentasImportables();
         return view('importacion_afirme.create', compact('cuentas'));
     }
 
@@ -52,15 +54,20 @@ class ImportacionAfirmeController extends Controller
             return back()->withInput()->withErrors(['archivo' => 'No se pudo leer el PDF: ' . $e->getMessage()]);
         }
 
-        // El tipo de estado de cuenta se reconoce por su contenido (Banregio primero: también dice "tarjeta de crédito")
-        if (BanregioTarjetaParser::reconoce($texto)) {
+        // El tipo de estado de cuenta se reconoce por su contenido (Banregio antes que Afirme: también dice "tarjeta de crédito")
+        if (AmexParser::reconoce($texto)) {
+            if (!$this->esAmex($cuenta)) {
+                return back()->withInput()->withErrors(['archivo' => "El PDF es un estado de cuenta American Express y la cuenta elegida ({$cuenta->nombre}) no es de American Express."]);
+            }
+            $estado = (new AmexParser())->parsearTexto($texto);
+        } elseif (BanregioTarjetaParser::reconoce($texto)) {
             $estado = (new BanregioTarjetaParser())->parsearTexto($texto);
         } elseif (AfirmeTarjetaParser::reconoce($texto)) {
             $estado = (new AfirmeTarjetaParser())->parsearTexto($texto);
         } elseif (AfirmeEstadoCuentaParser::reconoce($texto)) {
             $estado = (new AfirmeEstadoCuentaParser())->parsearTexto($texto);
         } else {
-            return back()->withInput()->withErrors(['archivo' => 'El PDF no es un estado de cuenta reconocido (Afirme Cuenta Visión, tarjeta de crédito Afirme o tarjeta de crédito Banregio).']);
+            return back()->withInput()->withErrors(['archivo' => 'El PDF no es un estado de cuenta reconocido (Afirme Cuenta Visión, tarjeta de crédito Afirme, tarjeta de crédito Banregio o American Express).']);
         }
 
         if ($estado['errores']) {
@@ -69,7 +76,7 @@ class ImportacionAfirmeController extends Controller
 
         $meses = [];
         if ($estado['tipo'] === 'tarjeta') {
-            [$filas, $msi] = (new AfirmeTarjetaClasificador($cuenta))->clasificar($estado);
+            [$filas, $msi] = (new TarjetaCreditoClasificador($cuenta))->clasificar($estado);
             $meses = $this->conciliarMeses($cuenta, $msi, $estado);
         } else {
             $filas = (new AfirmeClasificador($cuenta))->clasificar($estado['movimientos']);
@@ -100,7 +107,8 @@ class ImportacionAfirmeController extends Controller
         $estado = $importacion['estado'];
         $numero = preg_replace('/\D/', '', (string) $cuenta->numero);
         if ($estado['tipo'] === 'tarjeta') {
-            $cuentaDistinta = $numero !== '' && $estado['ultimos4'] && substr($numero, -4) !== $estado['ultimos4'];
+            $tarjetas = array_filter(array_merge([$estado['ultimos4']], $estado['tarjetas'] ?? []));
+            $cuentaDistinta = $numero !== '' && $tarjetas && !in_array(substr($numero, -4), $tarjetas, true);
         } else {
             $cuentaDistinta = $numero !== ''
                 && !in_array($numero, array_filter([$estado['clabe'], $estado['numero_cuenta'], ltrim((string) $estado['numero_cuenta'], '0')]), true);
@@ -154,7 +162,7 @@ class ImportacionAfirmeController extends Controller
             $registros[] = [$fila, $entrada];
         }
 
-        [$altasMeses, $erroresMeses] = $this->validarMeses($importacion['meses'] ?? [], $request->input('meses', []), $cuenta);
+        [$altasMeses, $mensualidades, $erroresMeses] = $this->validarMeses($importacion['meses'] ?? [], $request->input('meses', []), $cuenta);
         $errores += $erroresMeses;
 
         if ($errores) {
@@ -163,7 +171,7 @@ class ImportacionAfirmeController extends Controller
 
         $totales = array_fill_keys(['gasto', 'ingreso', 'traspaso', 'prestamo'], 0);
 
-        DB::transaction(function () use ($registros, $altasMeses, $cuenta, $importacion, &$totales) {
+        DB::transaction(function () use ($registros, $altasMeses, $mensualidades, $cuenta, $importacion, &$totales) {
             foreach ($registros as [$fila, $entrada]) {
                 $this->guardarFila($fila, $entrada, $cuenta, $importacion);
                 $totales[$entrada['tipo']]++;
@@ -172,6 +180,9 @@ class ImportacionAfirmeController extends Controller
                 $categoriaId = $this->sugeridor->resolver($categoria);
                 $this->sugeridor->aprender($datos['descripcion'], 'gasto', $categoriaId);
                 CompraMeses::registrar($cuenta, $datos, $categoriaId, false, auth()->id(), "Importado de {$importacion['archivo']}");
+            }
+            foreach ($mensualidades as [$renglon, $entrada]) {
+                $this->guardarMensualidad($renglon, $entrada, $cuenta, $importacion);
             }
         });
 
@@ -183,7 +194,9 @@ class ImportacionAfirmeController extends Controller
         if ($importacion['meses'] ?? []) {
             $resumen .= ', ' . count($altasMeses) . ' compras a meses';
         }
-
+        if ($mensualidades) {
+            $resumen .= ', ' . count($mensualidades) . ' mensualidades como gasto';
+        }
         return redirect()->route('gastos.index')->with('exito', 'Estado de cuenta ' . ($cuenta->banco->nombre ?? '') . " importado: {$resumen}.");
     }
 
@@ -213,23 +226,56 @@ class ImportacionAfirmeController extends Controller
             $renglon['fecha'] ??= $estado['periodo_fin'];
 
             // Categoría sugerida para el gasto de la compra (regla aprendida o palabra clave)
-            [$sugerida] = $this->sugeridor->sugerir([['naturaleza' => 'retiro', 'comercio' => $renglon['descripcion'], 'categoria_id' => null, 'motivo' => '']]);
+            [$sugerida] = $this->sugeridor->sugerir([['naturaleza' => 'retiro', 'comercio' => $renglon['comercio'] ?? $renglon['descripcion'], 'categoria_id' => null, 'motivo' => '']]);
 
-            return $renglon + $conciliador->conciliar($renglon) + ['categoria_id' => $sugerida['categoria_id']];
+            $renglon += $conciliador->conciliar($renglon) + ['categoria_id' => $sugerida['categoria_id']];
+            return $renglon + ['accion_sugerida' => $this->accionSugeridaMeses($renglon)];
         }, $msi);
     }
 
-    /** @return array{0: array, 1: array} altas [datos del plan, categoría] y errores por renglón */
+    /**
+     * Pago 1 → dar de alta el plan. En Amex, una compra con pago > 1 sin plan es
+     * anterior a lo registrado (o sus mensualidades ya se guardaban como gasto
+     * cada mes): se registra la mensualidad del periodo como gasto, porque dar de
+     * alta el plan pondría el gasto completo en un mes anterior o lo duplicaría.
+     * Si la mensualidad ya está registrada, no se guarda nada.
+     */
+    private function accionSugeridaMeses(array $renglon): string
+    {
+        $puedeAlta = in_array($renglon['accion'], [ConciliadorComprasMeses::CREAR, ConciliadorComprasMeses::SIN_PLAN], true);
+        if (!$puedeAlta || ($renglon['mensualidad_registrada'] ?? false)) {
+            return 'ignorar';
+        }
+        $esAmex = array_key_exists('mensualidades_previas', $renglon);
+        if ($esAmex && ($renglon['mensualidades_previas'] > 0 || $renglon['accion'] === ConciliadorComprasMeses::SIN_PLAN)) {
+            return 'mensualidad';
+        }
+        return $renglon['accion'] === ConciliadorComprasMeses::CREAR ? 'alta' : 'ignorar';
+    }
+
+    /** @return array{0: array, 1: array, 2: array} altas [datos del plan, categoría], mensualidades [renglón, entrada] y errores por renglón */
     private function validarMeses(array $meses, array $entradas, Cuenta $cuenta): array
     {
         $conciliador = new ConciliadorComprasMeses($cuenta);
         $altas   = [];
+        $mensualidades = [];
         $errores = [];
 
         foreach ($meses as $i => $renglon) {
             $entrada = $entradas[$i] ?? [];
+            $accion  = $entrada['accion'] ?? 'ignorar';
             $puedeAlta = in_array($renglon['accion'], [ConciliadorComprasMeses::CREAR, ConciliadorComprasMeses::SIN_PLAN], true);
-            if (!$puedeAlta || ($entrada['accion'] ?? 'ignorar') !== 'alta') {
+            if (!$puedeAlta || !in_array($accion, ['alta', 'mensualidad'], true)) {
+                continue;
+            }
+
+            if ($accion === 'mensualidad') {
+                $error = $this->validarMensualidad($renglon, $entrada);
+                if ($error) {
+                    $errores["meses.{$i}"] = 'Compra a meses ' . ($i + 1) . " ({$renglon['descripcion']}): {$error}";
+                } else {
+                    $mensualidades[] = [$renglon, $entrada];
+                }
                 continue;
             }
 
@@ -244,7 +290,41 @@ class ImportacionAfirmeController extends Controller
             $altas[] = [$datos, $entrada['categoria_id']];
         }
 
-        return [$altas, $errores];
+        return [$altas, $mensualidades, $errores];
+    }
+
+    // Solo las mensualidades de Amex vienen como cargo del periodo y se pueden registrar como gasto
+    private function validarMensualidad(array $renglon, array $entrada): ?string
+    {
+        if (!array_key_exists('mensualidades_previas', $renglon)) {
+            return 'esta compra no se puede registrar como mensualidad.';
+        }
+        $descripcion = trim($entrada['descripcion'] ?? '');
+        if ($descripcion === '' || mb_strlen($descripcion) > 200) {
+            return 'la descripción es obligatoria (máximo 200 caracteres).';
+        }
+        return $this->sugeridor->esValida($entrada['categoria_id'] ?? null, 'gasto') ? null : 'selecciona una categoría.';
+    }
+
+    private function guardarMensualidad(array $renglon, array $entrada, Cuenta $cuenta, array $importacion): void
+    {
+        $categoriaId = $this->sugeridor->resolver($entrada['categoria_id']);
+        $this->sugeridor->aprender($renglon['comercio'] ?? $renglon['descripcion'], 'gasto', $categoriaId);
+
+        Gasto::create([
+            'negocio_id'   => $cuenta->negocio_id,
+            'categoria_id' => $categoriaId,
+            'cuenta_id'    => $cuenta->id,
+            'user_id'      => auth()->id(),
+            'monto'        => $renglon['pago_requerido'],
+            'referencia'   => $renglon['referencia'] ?? null,
+            'fecha'        => $renglon['fecha'],
+            'concepto'     => trim($entrada['descripcion']) . " (mensualidad {$renglon['numero_pago']} de {$renglon['total_pagos']})",
+            'forma_pago'   => 'tarjeta',
+            'notas'        => "Importado de {$importacion['archivo']}: {$renglon['detalle']}",
+            'tiene_iva'    => false,
+            'monto_iva'    => 0,
+        ]);
     }
 
     /** @return array{0: ?array, 1: ?string} campos del plan o el error */
@@ -289,13 +369,20 @@ class ImportacionAfirmeController extends Controller
         ], null];
     }
 
-    private function cuentasAfirme()
+    private function cuentasImportables()
     {
         return $this->aplicarFiltroNegocio(Cuenta::with('negocio', 'banco'))
             ->where('tipo', 'banco')
-            ->whereHas('banco', fn ($q) => $q->where('nombre', 'like', '%afirme%')->orWhere('nombre', 'like', '%banregio%'))
+            ->whereHas('banco', fn ($q) => $q->where('nombre', 'like', '%afirme%')
+                ->orWhere('nombre', 'like', '%banregio%')
+                ->orWhere('nombre', 'like', '%american express%'))
             ->orderBy('nombre')
             ->get();
+    }
+
+    private function esAmex(Cuenta $cuenta): bool
+    {
+        return (bool) preg_match('/american express/i', (string) $cuenta->banco?->nombre);
     }
 
     private function validarFila(array $fila, array $entrada, Cuenta $cuenta): ?string

@@ -4,7 +4,7 @@
 
 @section('contenido')
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4>Importar estado de cuenta Afirme / Banregio (PDF)</h4>
+    <h4>Importar estado de cuenta (PDF)</h4>
     <a href="{{ route('gastos.index') }}" class="btn btn-secondary btn-sm">
         <i class="bi bi-arrow-left"></i> Regresar
     </a>
@@ -62,11 +62,12 @@
             </div>
             <div class="card-body small">
                 <ul class="mb-0">
-                    <li>Acepta el estado de cuenta Afirme de la <strong>Cuenta Visión</strong> o de la <strong>tarjeta de crédito</strong>, y el de la <strong>tarjeta de crédito Banregio</strong>; el tipo se detecta solo.</li>
+                    <li>Acepta el estado de cuenta Afirme (<strong>Cuenta Visión</strong> o <strong>tarjeta de crédito</strong>), el de la <strong>tarjeta de crédito Banregio</strong> y el de <strong>American Express</strong>; el tipo se detecta solo.</li>
                     <li>Antes de continuar se verifica que los movimientos cuadren con el resumen del estado de cuenta. Si no cuadra, no se importa.</li>
                     <li>Verás una vista previa con un tipo sugerido para cada movimiento. Nada se guarda hasta que confirmes.</li>
                     <li>Los movimientos ya importados (misma fecha, referencia y monto) se marcan para no duplicarlos.</li>
-                    <li>Si subes el estado de cuenta de la <strong>tarjeta de crédito</strong> Afirme, se lee la sección de <strong>compras a meses sin intereses</strong>: se comparan con tus compras a meses registradas y puedes dar de alta las que falten.</li>
+                    <li>En las <strong>tarjetas de crédito</strong> se lee la sección de <strong>compras a meses sin intereses</strong>: se comparan con tus compras a meses registradas y puedes dar de alta las que falten.</li>
+                    <li>American Express: cada cargo indica de qué tarjeta es (titular o adicional, últimos 4 dígitos) y los cargos en otra moneda se guardan en pesos con el monto original en la descripción.</li>
                 </ul>
             </div>
         </div>

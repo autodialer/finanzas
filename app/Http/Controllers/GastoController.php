@@ -8,7 +8,6 @@ use App\Models\Categoria;
 use App\Models\Proveedor;
 use App\Models\Cuenta;
 use Illuminate\Http\Request;
-use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class GastoController extends Controller
 {
@@ -132,12 +131,6 @@ class GastoController extends Controller
             ->with('exito', 'Este gasto es una compra a meses: edítalo o elimínalo desde aquí.');
     }
 
-    private function normalizarEncabezado(string $texto): string
-    {
-        $texto = mb_strtolower(trim($texto));
-        return strtr($texto, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ñ' => 'n']);
-    }
-
     private function calcularPropinaeIva(Request $request): array
     {
         $monto = (float) $request->monto;
@@ -178,118 +171,5 @@ class GastoController extends Controller
         }
         $gasto->delete();
         return redirect()->route('gastos.index')->with('exito', 'Gasto eliminado correctamente.');
-    }
-
-    public function importForm()
-    {
-        $negocios   = $this->negociosParaCaptura();
-        $categorias = Categoria::whereIn('tipo', ['gasto', 'ambos'])->orderBy('nombre')->get();
-        $cuentas    = Cuenta::with('negocio')->orderBy('nombre')->get();
-        return view('gastos.import', compact('negocios', 'categorias', 'cuentas'));
-    }
-
-    public function import(Request $request)
-    {
-        $user = auth()->user();
-        if ($user->isCapturista()) {
-            $request->merge(['negocio_id' => $user->negocio_id]);
-        }
-
-        $request->validate([
-            'negocio_id'   => 'required|exists:negocios,id',
-            'categoria_id' => 'required|exists:categorias,id',
-            'cuenta_id'    => 'required|exists:cuentas,id',
-            'archivo'      => 'required|file|mimes:xlsx,xls',
-        ]);
-
-        $spreadsheet = IOFactory::load($request->file('archivo')->getPathname());
-        $hoja = $spreadsheet->getActiveSheet();
-        $filas = $hoja->toArray(null, true, true, false);
-
-        // Buscar la fila de encabezados (tiene "Fecha" en la primera columna)
-        $headerRow = null;
-        foreach ($filas as $i => $fila) {
-            if (isset($fila[0]) && strtolower(trim((string)$fila[0])) === 'fecha') {
-                $headerRow = $i;
-                break;
-            }
-        }
-
-        if ($headerRow === null) {
-            return back()->withErrors(['archivo' => 'No se encontró la fila de encabezados en el archivo.']);
-        }
-
-        // Localizar columnas de Descripción e Importe por nombre de encabezado,
-        // ya que Amex cambia el orden de columnas entre exportaciones.
-        $colConcepto = null;
-        $colMonto    = null;
-        foreach ($filas[$headerRow] as $idx => $valor) {
-            $encabezado = $this->normalizarEncabezado((string) $valor);
-            if ($colConcepto === null && str_contains($encabezado, 'descripcion')) {
-                $colConcepto = $idx;
-            }
-            if ($colMonto === null && str_contains($encabezado, 'importe')) {
-                $colMonto = $idx;
-            }
-        }
-
-        if ($colConcepto === null || $colMonto === null) {
-            return back()->withErrors(['archivo' => 'No se encontraron las columnas "Descripción" e "Importe" en el archivo.']);
-        }
-
-        $importados = 0;
-        $omitidos   = 0;
-
-        for ($i = $headerRow + 1; $i < count($filas); $i++) {
-            $fila = $filas[$i];
-
-            $fecha    = trim((string)($fila[0] ?? ''));
-            $concepto = trim((string)($fila[$colConcepto] ?? ''));
-            $monto    = $fila[$colMonto] ?? null;
-
-            if (empty($fecha) || empty($concepto) || $monto === null || $monto === '') {
-                $omitidos++;
-                continue;
-            }
-
-            // Parsear fecha (viene como "22 Jun 2026" o como número de serie Excel)
-            try {
-                if (is_numeric($fecha)) {
-                    $fechaObj = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject((float)$fecha);
-                } else {
-                    $fechaObj = new \DateTime($fecha);
-                }
-                $fechaStr = $fechaObj->format('Y-m-d');
-            } catch (\Exception $e) {
-                $omitidos++;
-                continue;
-            }
-
-            $proveedor = Proveedor::firstOrCreate([
-                'negocio_id' => $request->negocio_id,
-                'nombre'     => $concepto,
-            ]);
-
-            Gasto::create([
-                'negocio_id'        => $request->negocio_id,
-                'categoria_id'      => $request->categoria_id,
-                'cuenta_id'         => $request->cuenta_id,
-                'proveedor_id'      => $proveedor->id,
-                'user_id'           => auth()->id(),
-                'monto'             => (float) $monto,
-                'fecha'             => $fechaStr,
-                'concepto'          => $concepto,
-                'forma_pago'        => 'tarjeta',
-                'tiene_iva'         => false,
-                'monto_iva'         => 0,
-                'tiene_propina'     => false,
-                'monto_propina'     => 0,
-                'porcentaje_propina'=> 0,
-            ]);
-            $importados++;
-        }
-
-        return redirect()->route('gastos.index')
-            ->with('exito', "Importación completada: {$importados} gastos importados, {$omitidos} omitidos.");
     }
 }

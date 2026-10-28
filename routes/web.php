@@ -54,8 +54,6 @@ Route::middleware('auth')->group(function () {
     Route::post('clientes-importar', [ClienteController::class, 'import'])->name('clientes.import');
     Route::resource('ingresos', IngresoController::class);
     Route::resource('gastos', GastoController::class);
-    Route::get('gastos-importar', [GastoController::class, 'importForm'])->name('gastos.import.form');
-    Route::post('gastos-importar', [GastoController::class, 'import'])->name('gastos.import');
     Route::get('importar-afirme', [ImportacionAfirmeController::class, 'create'])->name('importacion-afirme.create');
     Route::post('importar-afirme', [ImportacionAfirmeController::class, 'analizar'])->name('importacion-afirme.analizar');
     Route::get('importar-afirme/vista-previa', [ImportacionAfirmeController::class, 'preview'])->name('importacion-afirme.preview');

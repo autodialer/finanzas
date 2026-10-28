@@ -1,18 +1,20 @@
 @extends('layouts.app')
 
-@section('titulo', 'Vista Previa — Estado de cuenta')
-
 @php
+    $esAmex = ($estado['banco'] ?? null) === 'amex';
+
     $etiquetasTipo = ['gasto' => 'Gasto', 'ingreso' => 'Ingreso', 'traspaso' => 'Traspaso', 'prestamo' => 'Préstamo', 'ignorar' => 'Ignorar'];
     $conteo = collect($filas)->countBy('tipo');
     $esTarjeta = $estado['tipo'] === 'tarjeta';
 @endphp
 
+@section('titulo', 'Vista Previa — ' . ($esAmex ? 'American Express' : 'Estado de cuenta'))
+
 @section('contenido')
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h4>
         Vista previa — {{ $importacion['archivo'] }}
-        <span class="badge bg-secondary fs-6 align-middle">{{ $esTarjeta ? 'Tarjeta de crédito' : 'Cuenta Visión' }}</span>
+        <span class="badge bg-secondary fs-6 align-middle">{{ $esAmex ? 'American Express' : ($esTarjeta ? 'Tarjeta de crédito' : 'Cuenta Visión') }}</span>
     </h4>
     <form action="{{ route('importacion-afirme.cancelar') }}" method="POST">
         @csrf
@@ -36,7 +38,7 @@
         <i class="bi bi-exclamation-triangle me-1"></i>
         @if($esTarjeta)
             La cuenta elegida (<strong>{{ $cuenta->nombre }}</strong>, terminación {{ substr($cuenta->numero, -4) }}) no coincide con la tarjeta
-            del estado de cuenta (terminación {{ $estado['ultimos4'] }}). Verifica antes de confirmar.
+            del estado de cuenta (terminación {{ collect([$estado['ultimos4']])->merge($estado['tarjetas'] ?? [])->filter()->unique()->implode(', ') }}). Verifica antes de confirmar.
         @else
             La cuenta elegida (<strong>{{ $cuenta->nombre }}</strong>, {{ $cuenta->numero }}) no coincide con la del estado de cuenta
             (cuenta {{ $estado['numero_cuenta'] }}, CLABE {{ $estado['clabe'] }}). Verifica antes de confirmar.
@@ -52,7 +54,25 @@
                     <strong>Cuenta:</strong> {{ $cuenta->nombre }} — {{ $cuenta->negocio->nombre ?? '' }}<br>
                     <strong>Período:</strong> {{ \Carbon\Carbon::parse($estado['periodo_inicio'])->format('d/m/Y') }} al {{ \Carbon\Carbon::parse($estado['periodo_fin'])->format('d/m/Y') }}
                 </div>
-                @if($esTarjeta)
+                @if($esAmex)
+                <table class="table table-sm mb-0">
+                    <tr><td>Tarjetas</td><td class="text-end">
+                        @foreach($estado['tarjetas'] as $t)<span class="badge bg-light text-dark border ms-1">···{{ $t }}{{ $t === $estado['ultimos4'] ? ' titular' : '' }}</span>@endforeach
+                    </td></tr>
+                    <tr><td>Saldo anterior</td><td class="text-end">${{ number_format($estado['resumen']['saldo_anterior'], 2) }}</td></tr>
+                    <tr><td>− Pagos y créditos</td><td class="text-end text-success">${{ number_format($estado['resumen']['pagos_abonos'], 2) }}</td></tr>
+                    <tr><td>+ Nuevos cargos</td><td class="text-end text-danger">${{ number_format($estado['resumen']['nuevos_cargos'], 2) }}</td></tr>
+                    <tr class="fw-semibold"><td>Saldo al corte</td><td class="text-end">${{ number_format($estado['resumen']['saldo_corte'], 2) }}
+                        <span class="badge bg-success ms-1"><i class="bi bi-check-lg"></i> Cuadra</span></td></tr>
+                    @if($estado['resumen']['comisiones'] !== null)
+                        <tr class="text-muted"><td>Comisiones del periodo (sin IVA)</td><td class="text-end">${{ number_format($estado['resumen']['comisiones'], 2) }}</td></tr>
+                    @endif
+                    @if($estado['resumen']['msi_mensualidades'] !== null)
+                        <tr class="text-muted"><td>Mensualidades a meses (incluidas en nuevos cargos)</td><td class="text-end">${{ number_format($estado['resumen']['msi_mensualidades'], 2) }}</td></tr>
+                        <tr class="text-muted"><td>Saldo pendiente a meses</td><td class="text-end">${{ number_format($estado['resumen']['msi_saldo'], 2) }}</td></tr>
+                    @endif
+                </table>
+                @elseif($esTarjeta)
                 <table class="table table-sm mb-0">
                     <tr><td>Tarjeta</td><td class="text-end">terminación {{ $estado['ultimos4'] ?? '—' }}</td></tr>
                     <tr><td>Cargos regulares (no a meses)</td><td class="text-end text-danger">${{ number_format($estado['resumen']['cargos_regulares'], 2) }}</td></tr>
@@ -109,7 +129,11 @@
             <i class="bi bi-calendar3 me-1"></i>Compras a meses sin intereses
             <div class="fw-normal text-muted">
                 Cada compra a meses es un gasto por el monto original + su plan; las mensualidades no son gastos (se pagan con el traspaso a la tarjeta).
-                El estado de cuenta no trae la fecha de compra: se propone la del primer cargo.
+                @if($esAmex)
+                    Las compras a meses sin plan registrado (pago 2 en adelante) son anteriores a lo capturado: se propone registrar solo la mensualidad del periodo como gasto. Las compras nuevas (pago 1) se dan de alta con su plan.
+                @else
+                    El estado de cuenta no trae la fecha de compra: se propone la del primer cargo.
+                @endif
             </div>
         </div>
         <div class="table-responsive">
@@ -129,7 +153,8 @@
                         [$textoEstado, $claseEstado] = $estadosMeses[$msi['accion']];
                         $puedeAlta = in_array($msi['accion'], [$C::CREAR, $C::SIN_PLAN], true);
                         $sug = $msi['sugerencia'];
-                        $accionMeses = old("meses.$i.accion", $msi['accion'] === $C::CREAR ? 'alta' : 'ignorar');
+                        $accionMeses = old("meses.$i.accion", $msi['accion_sugerida']);
+                        $permiteMensualidad = array_key_exists('mensualidades_previas', $msi);
                         $categoriaMeses = old("meses.$i.categoria_id", $msi['categoria_id']);
                         $plan = $msi['compra_id'] ? ($compras[$msi['compra_id']] ?? null) : null;
                     @endphp
@@ -138,6 +163,10 @@
                         <td>
                             <div class="fw-semibold">{{ $msi['descripcion'] }}</div>
                             <div class="small text-muted">Cargo {{ \Carbon\Carbon::parse($msi['fecha'])->format('d/m/Y') }} · Pago {{ $msi['numero_pago'] }} de {{ $msi['total_pagos'] ?? '?' }}</div>
+                            @if(!empty($msi['fecha_compra']))
+                                <div class="small text-muted">Compra {{ \Carbon\Carbon::parse($msi['fecha_compra'])->format('d/m/Y') }}</div>
+                            @endif
+                            @if(!empty($msi['tarjeta']))<span class="badge bg-light text-dark border">Tarjeta ···{{ $msi['tarjeta'] }}</span>@endif
                         </td>
                         <td class="text-end small text-nowrap">
                             Original ${{ number_format($msi['monto_original'], 2) }}<br>
@@ -149,6 +178,11 @@
                             @if($plan)
                                 <div class="small mt-1"><a href="{{ route('compras-meses.show', $plan) }}" target="_blank">{{ $plan->descripcion }}</a></div>
                             @endif
+                            @if($msi['mensualidad_registrada'] ?? false)
+                                <div class="small text-muted mt-1"><i class="bi bi-check2"></i> La mensualidad de este periodo ya está registrada como gasto.</div>
+                            @elseif(($msi['mensualidades_previas'] ?? 0) > 0)
+                                <div class="small text-muted mt-1"><i class="bi bi-info-circle"></i> {{ $msi['mensualidades_previas'] }} mensualidad(es) anteriores registradas como gasto.</div>
+                            @endif
                             @foreach($msi['avisos'] as $aviso)
                                 <div class="small text-danger mt-1"><i class="bi bi-exclamation-circle"></i> {{ $aviso }}</div>
                             @endforeach
@@ -159,6 +193,9 @@
                                 <div class="col-12">
                                     <select name="meses[{{ $i }}][accion]" class="form-select form-select-sm">
                                         <option value="alta" @selected($accionMeses === 'alta')>Dar de alta (gasto + plan)</option>
+                                        @if($permiteMensualidad)
+                                            <option value="mensualidad" @selected($accionMeses === 'mensualidad')>Registrar solo esta mensualidad como gasto</option>
+                                        @endif
                                         <option value="ignorar" @selected($accionMeses === 'ignorar')>Ignorar</option>
                                     </select>
                                 </div>
@@ -245,6 +282,7 @@
                             <div class="small text-muted mt-1">
                                 {{ $fila['motivo'] }}
                                 @if($fila['referencia']) · Ref. {{ $fila['referencia'] }}@endif
+                                @if(!empty($fila['tarjeta']))<span class="badge bg-light text-dark border ms-1">Tarjeta ···{{ $fila['tarjeta'] }}</span>@endif
                                 @if($fila['duplicado'])<span class="badge bg-warning text-dark ms-1">Duplicado</span>@endif
                             </div>
                             <details class="small text-muted"><summary>Detalle</summary>{{ $fila['detalle'] }}</details>
