@@ -36,4 +36,8 @@ class Gasto extends Model
     {
         return $this->belongsTo(\App\Models\User::class);
     }
+    public function compraMeses()
+    {
+        return $this->hasOne(CompraMeses::class);
+    }
 }

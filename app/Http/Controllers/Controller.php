@@ -63,6 +63,12 @@ abstract class Controller
         });
     }
 
+    // Compras a meses visibles: se filtran con las mismas reglas que su gasto.
+    protected function comprasMesesVisibles()
+    {
+        return \App\Models\CompraMeses::whereHas('gasto', fn ($q) => $this->aplicarFiltroReportes($q));
+    }
+
     // Lanza 403 si el usuario capturista intenta acceder a un negocio que no es el suyo.
     protected function autorizarAccesoNegocio(int $negocioId): void
     {

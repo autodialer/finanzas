@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\BancoController;
 use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\ClienteController;
+use App\Http\Controllers\CompraMesesController;
 use App\Http\Controllers\CuentaController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GastoController;
@@ -60,6 +61,7 @@ Route::middleware('auth')->group(function () {
     Route::get('importar-afirme/vista-previa', [ImportacionAfirmeController::class, 'preview'])->name('importacion-afirme.preview');
     Route::post('importar-afirme/confirmar', [ImportacionAfirmeController::class, 'confirmar'])->name('importacion-afirme.confirmar');
     Route::post('importar-afirme/cancelar', [ImportacionAfirmeController::class, 'cancelar'])->name('importacion-afirme.cancelar');
+    Route::resource('compras-meses', CompraMesesController::class)->parameters(['compras-meses' => 'compra']);
     Route::resource('traspasos', TraspasoController::class)->only(['index', 'create', 'store', 'destroy']);
     Route::resource('prestamos', PrestamoController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
     Route::post('prestamos/{prestamo}/pagos', [PrestamoController::class, 'storePago'])->name('prestamos.pagos.store');

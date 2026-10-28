@@ -12,11 +12,16 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h4 class="mb-0">Reporte Mensual</h4>
     <div class="d-flex align-items-center gap-2">
-        <a href="{{ route('reportes.mensual', ['mes' => $mesAnterior->month, 'anio' => $mesAnterior->year]) }}" class="btn btn-outline-secondary btn-sm">
+        <a href="{{ route('reportes.mensual', ['mes' => $mes, 'anio' => $anio, 'prorrateado' => $prorrateado ? null : 1]) }}"
+           class="btn btn-sm {{ $prorrateado ? 'btn-info' : 'btn-outline-info' }} me-2"
+           title="Las compras a meses cuentan por su mensualidad del mes, no por el monto completo">
+            <i class="bi bi-calendar3"></i> Prorrateado {{ $prorrateado ? 'activado' : 'desactivado' }}
+        </a>
+        <a href="{{ route('reportes.mensual', ['mes' => $mesAnterior->month, 'anio' => $mesAnterior->year, 'prorrateado' => $prorrateado ? 1 : null]) }}" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-chevron-left"></i>
         </a>
         <span class="fw-bold">{{ $nombreMes }}</span>
-        <a href="{{ route('reportes.mensual', ['mes' => $mesSiguiente->month, 'anio' => $mesSiguiente->year]) }}" class="btn btn-outline-secondary btn-sm">
+        <a href="{{ route('reportes.mensual', ['mes' => $mesSiguiente->month, 'anio' => $mesSiguiente->year, 'prorrateado' => $prorrateado ? 1 : null]) }}" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-chevron-right"></i>
         </a>
     </div>

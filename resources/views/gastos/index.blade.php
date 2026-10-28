@@ -126,6 +126,11 @@
                     <td class="text-end text-danger fw-bold">${{ number_format($gasto->monto, 2) }}</td>
                     <td class="text-muted small">{{ $gasto->user->name ?? '-' }}</td>
                     <td>
+                        @if($gasto->compraMeses)
+                        <a href="{{ route('compras-meses.show', $gasto->compraMeses) }}" class="btn btn-sm btn-outline-primary" title="Compra a meses">
+                            <i class="bi bi-calendar3"></i> MSI
+                        </a>
+                        @else
                         <a href="{{ route('gastos.edit', $gasto) }}" class="btn btn-sm btn-warning">
                             <i class="bi bi-pencil"></i>
                         </a>
@@ -135,6 +140,7 @@
                                 <i class="bi bi-trash"></i>
                             </button>
                         </form>
+                        @endif
                     </td>
                 </tr>
                 @empty

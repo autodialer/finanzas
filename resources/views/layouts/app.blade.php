@@ -71,6 +71,9 @@
                     <a href="{{ route('traspasos.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('traspasos*') ? 'active' : '' }}">
                         <i class="bi bi-arrow-left-right me-2"></i>Traspasos
                     </a>
+                    <a href="{{ route('compras-meses.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('compras-meses*') ? 'active' : '' }}">
+                        <i class="bi bi-calendar3 me-2"></i>Compras a meses
+                    </a>
                     <a href="{{ route('prestamos.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('prestamos*') ? 'active' : '' }}">
                         <i class="bi bi-bank2 me-2"></i>Préstamos
                     </a>
@@ -164,6 +167,7 @@
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('ingresos.index') }}">Ingresos</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('gastos.index') }}">Gastos</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('traspasos.index') }}">Traspasos</a></li>
+                                <li class="nav-item"><a class="nav-link text-white" href="{{ route('compras-meses.index') }}">Compras a meses</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('prestamos.index') }}">Préstamos</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('reportes.index') }}">Reportes</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('reportes.mensual') }}">Reporte Mensual</a></li>

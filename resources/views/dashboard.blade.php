@@ -106,6 +106,43 @@
     </div>
 </div>
 
+<!-- Compromisos a meses -->
+@if($comprasMesesActivas > 0)
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span class="fw-bold"><i class="bi bi-calendar3 me-1"></i> Compromisos a meses</span>
+                <a href="{{ route('compras-meses.index') }}" class="small">{{ $comprasMesesActivas }} {{ $comprasMesesActivas === 1 ? 'compra activa' : 'compras activas' }}</a>
+            </div>
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-3 mb-3 mb-md-0">
+                        <div class="text-muted small">Mensualidades de este mes</div>
+                        <div class="fs-4 fw-bold text-danger">${{ number_format($compromisoMesActual, 2) }}</div>
+                    </div>
+                    <div class="col-md-3 mb-3 mb-md-0">
+                        <div class="text-muted small">Saldo pendiente total</div>
+                        <div class="fs-4 fw-bold text-danger">${{ number_format($saldoPendienteMeses, 2) }}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-muted small mb-1">Próximos 6 meses</div>
+                        <div class="d-flex flex-wrap gap-2">
+                            @foreach($compromisosMeses as $mes => $total)
+                            <div class="border rounded px-2 py-1 text-center flex-fill">
+                                <div class="small text-muted">{{ ucfirst(\Carbon\Carbon::createFromFormat('Y-m-d', $mes . '-01')->locale('es')->isoFormat('MMM YY')) }}</div>
+                                <div class="fw-semibold small">${{ number_format($total, 2) }}</div>
+                            </div>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+
 <!-- Saldo disponible en cuentas -->
 <div class="row mb-4">
     <div class="col-12">

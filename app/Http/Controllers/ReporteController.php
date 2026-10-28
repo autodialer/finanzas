@@ -8,6 +8,8 @@ use App\Models\Traspaso;
 use App\Models\Negocio;
 use App\Models\Categoria;
 use App\Models\Cuenta;
+use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Http\Request;
 
 class ReporteController extends Controller
@@ -32,6 +34,14 @@ class ReporteController extends Controller
             $queryGastos->where('categoria_id', $filtros['categoria_id']);
         }
 
+        // Prorrateado: las compras a meses cuentan por las mensualidades del período, no por el monto completo
+        $prorrateado = $request->boolean('prorrateado');
+        $gastosMeses = collect();
+        if ($prorrateado) {
+            $gastosMeses = (clone $queryGastos)->whereHas('compraMeses')->with('compraMeses')->get();
+            $queryGastos->whereDoesntHave('compraMeses');
+        }
+
         if (!empty($filtros['fecha_inicio'])) {
             $queryIngresos->where('fecha', '>=', $filtros['fecha_inicio']);
             $queryGastos->where('fecha', '>=', $filtros['fecha_inicio']);
@@ -44,6 +54,15 @@ class ReporteController extends Controller
 
         $ingresos = ($filtros['tipo'] ?? '') == 'gasto' ? collect() : $queryIngresos->latest()->get();
         $gastos = ($filtros['tipo'] ?? '') == 'ingreso' ? collect() : $queryGastos->latest()->get();
+        if ($prorrateado && ($filtros['tipo'] ?? '') != 'ingreso') {
+            // Sin fecha fin solo cuentan las mensualidades ya cargadas (hasta hoy)
+            $mensualidades = $this->mensualidadesComoGastos(
+                $gastosMeses,
+                !empty($filtros['fecha_inicio']) ? Carbon::parse($filtros['fecha_inicio']) : null,
+                !empty($filtros['fecha_fin']) ? Carbon::parse($filtros['fecha_fin']) : now()
+            );
+            $gastos = $gastos->concat($mensualidades)->sortByDesc('fecha')->values();
+        }
         $totalIngresos = $ingresos->sum('monto');
         $totalGastos = $gastos->sum('monto');
         $balance = $totalIngresos - $totalGastos;
@@ -56,7 +75,8 @@ class ReporteController extends Controller
             'gastos',
             'totalIngresos',
             'totalGastos',
-            'balance'
+            'balance',
+            'prorrateado'
         ));
     }
 
@@ -78,12 +98,26 @@ class ReporteController extends Controller
             ->groupBy('negocio_id')
             ->pluck('total', 'negocio_id');
 
+        $prorrateado = $request->boolean('prorrateado');
+
         $gastosPorNegocio = $this->aplicarFiltroReportes(Gasto::query())
             ->whereIn('negocio_id', $negocioIds)
             ->whereBetween('fecha', [$inicioMes->toDateString(), $finMes->toDateString()])
+            ->when($prorrateado, fn ($q) => $q->whereDoesntHave('compraMeses'))
             ->selectRaw('negocio_id, SUM(monto) as total')
             ->groupBy('negocio_id')
             ->pluck('total', 'negocio_id');
+
+        if ($prorrateado) {
+            $gastosMeses = $this->aplicarFiltroReportes(Gasto::query())
+                ->whereIn('negocio_id', $negocioIds)
+                ->whereHas('compraMeses')
+                ->with('compraMeses')
+                ->get();
+            foreach ($this->mensualidadesComoGastos($gastosMeses, $inicioMes, $finMes) as $mensualidad) {
+                $gastosPorNegocio[$mensualidad->negocio_id] = ($gastosPorNegocio[$mensualidad->negocio_id] ?? 0) + $mensualidad->monto;
+            }
+        }
 
         $reporte = $negocios->map(function ($negocio) use ($ingresosPorNegocio, $gastosPorNegocio) {
             $ingresos = (float) ($ingresosPorNegocio[$negocio->id] ?? 0);
@@ -108,8 +142,28 @@ class ReporteController extends Controller
             'mes',
             'anio',
             'inicioMes',
-            'finMes'
+            'finMes',
+            'prorrateado'
         ));
+    }
+
+    /**
+     * Convierte los gastos de compras a meses en sus mensualidades del período:
+     * un renglón (no guardado) por cada cargo, con el IVA en proporción.
+     */
+    private function mensualidadesComoGastos(Collection $gastos, ?Carbon $desde, Carbon $hasta): Collection
+    {
+        return $gastos->flatMap(function (Gasto $gasto) use ($desde, $hasta) {
+            $compra = $gasto->compraMeses;
+            return $compra->cargosEntre($desde ?? $compra->fecha_primer_cargo, $hasta)->map(function ($cargo) use ($gasto, $compra) {
+                $fila = $gasto->replicate();
+                $fila->fecha     = $cargo['fecha']->toDateString();
+                $fila->monto     = $cargo['monto'];
+                $fila->monto_iva = $gasto->monto > 0 ? round($gasto->monto_iva * $cargo['monto'] / $gasto->monto, 2) : 0;
+                $fila->concepto  = "{$gasto->concepto} — mensualidad {$cargo['numero']}/{$compra->meses}";
+                return $fila;
+            });
+        });
     }
 
     public function cuentas(Request $request)

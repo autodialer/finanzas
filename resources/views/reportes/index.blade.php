@@ -49,6 +49,12 @@
                         <option value="gasto" {{ ($filtros['tipo'] ?? '') == 'gasto' ? 'selected' : '' }}>Solo gastos</option>
                     </select>
                 </div>
+                <div class="col-md-3 mb-3 d-flex align-items-end">
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" name="prorrateado" id="prorrateado" value="1" {{ $prorrateado ? 'checked' : '' }}>
+                        <label class="form-check-label" for="prorrateado" title="Las compras a meses cuentan por sus mensualidades del período, no por el monto completo">Prorrateado (MSI por mensualidad)</label>
+                    </div>
+                </div>
                 <div class="col-md-3 mb-3 d-flex align-items-end gap-2">
                     <button type="submit" class="btn btn-primary w-100">
                         <i class="bi bi-search"></i> Filtrar
@@ -140,6 +146,7 @@
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header bg-white fw-bold text-danger">
         <i class="bi bi-arrow-up-circle"></i> Gastos ({{ $gastos->count() }})
+        @if($prorrateado) <span class="badge bg-info text-dark ms-1">Prorrateado: compras a meses por mensualidad</span> @endif
     </div>
     <div class="card-body p-0">
         <table class="table table-hover mb-0">

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Ingreso;
 use App\Models\Gasto;
 use App\Models\Negocio;
+use App\Models\CompraMeses;
 use App\Models\Cuenta;
 use App\Models\Traspaso;
 use Illuminate\Support\Facades\DB;
@@ -90,11 +91,19 @@ class DashboardController extends Controller
             ->sortByDesc('fecha')
             ->take(10);
 
+        // Compromisos a meses: mes actual + los 6 siguientes
+        $comprasMeses = $this->comprasMesesVisibles()->get();
+        $compromisosMeses = CompraMeses::compromisosPorMes($comprasMeses, now(), 7);
+        $compromisoMesActual = array_shift($compromisosMeses);
+        $saldoPendienteMeses = $comprasMeses->sum('saldo_pendiente');
+        $comprasMesesActivas = $comprasMeses->reject(fn ($c) => $c->terminada)->count();
+
         return view('dashboard', compact(
             'totalIngresosMes', 'totalGastosMes', 'balanceMes',
             'ivaCobradomMes', 'ivaPagadoMes', 'saldoIva',
             'ingresosPorNegocio', 'gastosPorNegocio',
-            'ultimosMovimientos', 'cuentasConSaldo', 'saldoTotalCuentas'
+            'ultimosMovimientos', 'cuentasConSaldo', 'saldoTotalCuentas',
+            'compromisosMeses', 'compromisoMesActual', 'saldoPendienteMeses', 'comprasMesesActivas'
         ));
     }
 }

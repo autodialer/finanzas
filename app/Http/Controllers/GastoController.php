@@ -25,7 +25,7 @@ class GastoController extends Controller
         $filtros = session('gastos_filtros', []);
 
         $query = $this->aplicarFiltroReportes(
-            Gasto::with('negocio', 'categoria', 'proveedor', 'cuenta', 'user')
+            Gasto::with('negocio', 'categoria', 'proveedor', 'cuenta', 'user', 'compraMeses')
         );
 
         if (!empty($filtros['fecha_desde']))   $query->where('fecha', '>=', $filtros['fecha_desde']);
@@ -81,6 +81,9 @@ class GastoController extends Controller
     public function edit(Gasto $gasto)
     {
         $this->autorizarAccesoNegocio($gasto->negocio_id);
+        if ($redireccion = $this->redirigirACompraMeses($gasto)) {
+            return $redireccion;
+        }
 
         $negocios    = $this->negociosParaCaptura();
         $categorias  = Categoria::whereIn('tipo', ['gasto', 'ambos'])->get();
@@ -92,6 +95,9 @@ class GastoController extends Controller
     public function update(Request $request, Gasto $gasto)
     {
         $this->autorizarAccesoNegocio($gasto->negocio_id);
+        if ($redireccion = $this->redirigirACompraMeses($gasto)) {
+            return $redireccion;
+        }
 
         $user = auth()->user();
         if ($user->isCapturista()) {
@@ -114,6 +120,16 @@ class GastoController extends Controller
 
         $gasto->update($data);
         return redirect()->route('gastos.index')->with('exito', 'Gasto actualizado correctamente.');
+    }
+
+    // Un gasto de una compra a meses se edita desde su plan para que no se desincronicen
+    private function redirigirACompraMeses(Gasto $gasto)
+    {
+        if (!$gasto->compraMeses) {
+            return null;
+        }
+        return redirect()->route('compras-meses.edit', $gasto->compraMeses)
+            ->with('exito', 'Este gasto es una compra a meses: edítalo o elimínalo desde aquí.');
     }
 
     private function normalizarEncabezado(string $texto): string
@@ -157,6 +173,9 @@ class GastoController extends Controller
     public function destroy(Gasto $gasto)
     {
         $this->autorizarAccesoNegocio($gasto->negocio_id);
+        if ($redireccion = $this->redirigirACompraMeses($gasto)) {
+            return $redireccion;
+        }
         $gasto->delete();
         return redirect()->route('gastos.index')->with('exito', 'Gasto eliminado correctamente.');
     }
