@@ -171,7 +171,8 @@ class ImportacionAmexTest extends TestCase
         $meses = session('importacion_afirme.meses');
 
         $this->assertSame([C::SIN_PLAN, C::CREAR], array_column($meses, 'accion'));
-        $this->assertSame(['ignorar', 'alta'], array_column($meses, 'accion_sugerida'));
+        // Pago 5 sin plan: compra anterior a lo registrado → solo la mensualidad como gasto; pago 1 → alta del plan
+        $this->assertSame(['mensualidad', 'alta'], array_column($meses, 'accion_sugerida'));
         // La fecha de compra viene en el estado de cuenta
         $this->assertEquals(['fecha_compra' => '2025-12-20', 'fecha_primer_cargo' => '2025-12-23', 'meses' => 3, 'mensualidad' => 300.0],
             array_intersect_key($meses[1]['sugerencia'], array_flip(['fecha_compra', 'fecha_primer_cargo', 'meses', 'mensualidad'])));

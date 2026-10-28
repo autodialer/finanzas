@@ -234,10 +234,11 @@ class ImportacionAfirmeController extends Controller
     }
 
     /**
-     * Pago 1 → dar de alta el plan. En Amex, si las mensualidades anteriores de
-     * esa compra ya se registraron como gasto cada mes, se sigue igual con la de
-     * este periodo (dar de alta el plan duplicaría el gasto); si ya está
-     * registrada, no se guarda nada.
+     * Pago 1 → dar de alta el plan. En Amex, una compra con pago > 1 sin plan es
+     * anterior a lo registrado (o sus mensualidades ya se guardaban como gasto
+     * cada mes): se registra la mensualidad del periodo como gasto, porque dar de
+     * alta el plan pondría el gasto completo en un mes anterior o lo duplicaría.
+     * Si la mensualidad ya está registrada, no se guarda nada.
      */
     private function accionSugeridaMeses(array $renglon): string
     {
@@ -245,7 +246,8 @@ class ImportacionAfirmeController extends Controller
         if (!$puedeAlta || ($renglon['mensualidad_registrada'] ?? false)) {
             return 'ignorar';
         }
-        if (($renglon['mensualidades_previas'] ?? 0) > 0) {
+        $esAmex = array_key_exists('mensualidades_previas', $renglon);
+        if ($esAmex && ($renglon['mensualidades_previas'] > 0 || $renglon['accion'] === ConciliadorComprasMeses::SIN_PLAN)) {
             return 'mensualidad';
         }
         return $renglon['accion'] === ConciliadorComprasMeses::CREAR ? 'alta' : 'ignorar';

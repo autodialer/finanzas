@@ -130,7 +130,7 @@
             <div class="fw-normal text-muted">
                 Cada compra a meses es un gasto por el monto original + su plan; las mensualidades no son gastos (se pagan con el traspaso a la tarjeta).
                 @if($esAmex)
-                    Si las mensualidades anteriores de una compra ya se registraron como gasto cada mes, se propone registrar también la de este periodo como gasto, para no duplicarla con el alta del plan.
+                    Las compras a meses sin plan registrado (pago 2 en adelante) son anteriores a lo capturado: se propone registrar solo la mensualidad del periodo como gasto. Las compras nuevas (pago 1) se dan de alta con su plan.
                 @else
                     El estado de cuenta no trae la fecha de compra: se propone la del primer cargo.
                 @endif
