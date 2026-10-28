@@ -5,11 +5,15 @@
 @php
     $etiquetasTipo = ['gasto' => 'Gasto', 'ingreso' => 'Ingreso', 'traspaso' => 'Traspaso', 'prestamo' => 'Préstamo', 'ignorar' => 'Ignorar'];
     $conteo = collect($filas)->countBy('tipo');
+    $esTarjeta = $estado['tipo'] === 'tarjeta';
 @endphp
 
 @section('contenido')
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4>Vista previa — {{ $importacion['archivo'] }}</h4>
+    <h4>
+        Vista previa — {{ $importacion['archivo'] }}
+        <span class="badge bg-secondary fs-6 align-middle">{{ $esTarjeta ? 'Tarjeta de crédito' : 'Cuenta Visión' }}</span>
+    </h4>
     <form action="{{ route('importacion-afirme.cancelar') }}" method="POST">
         @csrf
         <button class="btn btn-secondary btn-sm"><i class="bi bi-x-lg"></i> Cancelar</button>
@@ -30,8 +34,13 @@
 @if($cuentaDistinta)
     <div class="alert alert-warning">
         <i class="bi bi-exclamation-triangle me-1"></i>
-        La cuenta elegida (<strong>{{ $cuenta->nombre }}</strong>, {{ $cuenta->numero }}) no coincide con la del estado de cuenta
-        (cuenta {{ $estado['numero_cuenta'] }}, CLABE {{ $estado['clabe'] }}). Verifica antes de confirmar.
+        @if($esTarjeta)
+            La cuenta elegida (<strong>{{ $cuenta->nombre }}</strong>, terminación {{ substr($cuenta->numero, -4) }}) no coincide con la tarjeta
+            del estado de cuenta (terminación {{ $estado['ultimos4'] }}). Verifica antes de confirmar.
+        @else
+            La cuenta elegida (<strong>{{ $cuenta->nombre }}</strong>, {{ $cuenta->numero }}) no coincide con la del estado de cuenta
+            (cuenta {{ $estado['numero_cuenta'] }}, CLABE {{ $estado['clabe'] }}). Verifica antes de confirmar.
+        @endif
     </div>
 @endif
 
@@ -43,6 +52,20 @@
                     <strong>Cuenta:</strong> {{ $cuenta->nombre }} — {{ $cuenta->negocio->nombre ?? '' }}<br>
                     <strong>Período:</strong> {{ \Carbon\Carbon::parse($estado['periodo_inicio'])->format('d/m/Y') }} al {{ \Carbon\Carbon::parse($estado['periodo_fin'])->format('d/m/Y') }}
                 </div>
+                @if($esTarjeta)
+                <table class="table table-sm mb-0">
+                    <tr><td>Tarjeta</td><td class="text-end">terminación {{ $estado['ultimos4'] ?? '—' }}</td></tr>
+                    <tr><td>Cargos regulares (no a meses)</td><td class="text-end text-danger">${{ number_format($estado['resumen']['cargos_regulares'], 2) }}</td></tr>
+                    <tr><td>Pagos y abonos</td><td class="text-end text-success">${{ number_format($estado['resumen']['pagos_abonos'], 2) }}</td></tr>
+                    @if($estado['resumen']['cargos_meses'] !== null)
+                        <tr class="text-muted"><td>Cargos a meses (capital, informativo)</td><td class="text-end">${{ number_format($estado['resumen']['cargos_meses'], 2) }}</td></tr>
+                    @endif
+                    @if($estado['resumen']['pago_no_intereses'] !== null)
+                        <tr class="fw-semibold"><td>Pago para no generar intereses</td><td class="text-end">${{ number_format($estado['resumen']['pago_no_intereses'], 2) }}
+                            <span class="badge bg-success ms-1"><i class="bi bi-check-lg"></i> Cuadra</span></td></tr>
+                    @endif
+                </table>
+                @else
                 <table class="table table-sm mb-0">
                     <tr><td>Saldo inicial</td><td class="text-end">${{ number_format($estado['resumen']['saldo_inicial'], 2) }}</td></tr>
                     <tr><td>+ Depósitos</td><td class="text-end text-success">${{ number_format($estado['resumen']['depositos'], 2) }}</td></tr>
@@ -50,6 +73,7 @@
                     <tr class="fw-semibold"><td>Saldo al corte</td><td class="text-end">${{ number_format($estado['resumen']['saldo_corte'], 2) }}
                         <span class="badge bg-success ms-1"><i class="bi bi-check-lg"></i> Cuadra</span></td></tr>
                 </table>
+                @endif
             </div>
         </div>
     </div>
@@ -92,7 +116,12 @@
                     @endphp
                     <tr class="fila-importacion {{ $errors->has("filas.$i") ? 'table-danger' : '' }}" data-tipo="{{ $tipo }}">
                         <td class="text-muted">{{ $i + 1 }}</td>
-                        <td class="text-nowrap">{{ \Carbon\Carbon::parse($fila['fecha'])->format('d/m/Y') }}</td>
+                        <td class="text-nowrap">
+                            {{ \Carbon\Carbon::parse($fila['fecha'])->format('d/m/Y') }}
+                            @if(($fila['fecha_cargo'] ?? $fila['fecha']) !== $fila['fecha'])
+                                <div class="small text-muted">cargo {{ \Carbon\Carbon::parse($fila['fecha_cargo'])->format('d/m') }}</div>
+                            @endif
+                        </td>
                         <td>
                             <input type="text" name="filas[{{ $i }}][concepto]" class="form-control form-control-sm"
                                    value="{{ old("filas.$i.concepto", $fila['concepto']) }}" maxlength="255">
@@ -123,6 +152,14 @@
                                     @foreach($categoriasGasto as $categoria)
                                         <option value="{{ $categoria->id }}" @selected(old("filas.$i.categoria_id", $fila['categoria_id']) == $categoria->id)>{{ $categoria->nombre }}</option>
                                     @endforeach
+                                    @if($categoriasNuevas)
+                                        <optgroup label="Nuevas (se crean al confirmar)">
+                                            @foreach($categoriasNuevas as $nueva)
+                                                @php $valor = \App\Services\SugeridorCategoria::PREFIJO_NUEVA . $nueva; @endphp
+                                                <option value="{{ $valor }}" @selected(old("filas.$i.categoria_id", $fila['categoria_id']) === $valor)>{{ $nueva }}</option>
+                                            @endforeach
+                                        </optgroup>
+                                    @endif
                                 </select>
                             </div>
                             <div class="campo-tipo" data-para="ingreso">
@@ -165,13 +202,40 @@
             </table>
         </div>
         <div class="card-footer d-flex justify-content-between align-items-center">
-            <span class="small text-muted">Las filas en "Ignorar" no se guardan.</span>
+            <span class="small text-muted">Las filas en "Ignorar" no se guardan. La categoría que elijas se recordará para cada comercio.</span>
             <button type="submit" class="btn btn-success">
                 <i class="bi bi-check-lg me-1"></i>Confirmar importación
             </button>
         </div>
     </div>
 </form>
+
+@if(!empty($importacion['msi_informativos']))
+    <div class="card mt-3">
+        <div class="card-header small fw-semibold">
+            <i class="bi bi-info-circle me-1"></i>Meses sin intereses en curso (solo informativo, no se importan)
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead class="table-light">
+                    <tr><th>Fecha</th><th>Descripción</th><th class="text-end">Monto original</th><th class="text-end">Saldo pendiente</th><th class="text-end">Pago requerido</th><th class="text-center">Núm. de pago</th></tr>
+                </thead>
+                <tbody>
+                @foreach($importacion['msi_informativos'] as $msi)
+                    <tr>
+                        <td>{{ $msi['fecha'] ? \Carbon\Carbon::parse($msi['fecha'])->format('d/m/Y') : '—' }}</td>
+                        <td>{{ $msi['descripcion'] }}</td>
+                        <td class="text-end">${{ number_format($msi['monto_original'], 2) }}</td>
+                        <td class="text-end">${{ number_format($msi['saldo_pendiente'], 2) }}</td>
+                        <td class="text-end">${{ number_format($msi['pago_requerido'], 2) }}</td>
+                        <td class="text-center">{{ $msi['numero_pago'] }}</td>
+                    </tr>
+                @endforeach
+                </tbody>
+            </table>
+        </div>
+    </div>
+@endif
 @endsection
 
 @section('scripts')

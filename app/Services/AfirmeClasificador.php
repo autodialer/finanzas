@@ -130,32 +130,50 @@ class AfirmeClasificador
         }
     }
 
-    private function fila(array $movs, string $tipo, string $motivo): array
+    /** Campos de una fila de la vista previa (comunes a Visión y tarjeta de crédito). */
+    public static function filaBase(array $datos): array
     {
-        $mov = $movs[0];
-
-        return [
-            'fecha'             => $mov['fecha'],
-            'naturaleza'        => $mov['naturaleza'],
-            'referencia'        => $mov['referencia'],
-            'monto'             => round(array_sum(array_column($movs, 'monto')), 2),
+        return array_merge([
+            'fecha'             => null,
+            'naturaleza'        => null, // retiro (sale dinero) o deposito (entra)
+            'referencia'        => null,
+            'monto'             => 0,
             'monto_iva'         => 0,
-            'concepto'          => $this->resumir($mov['descripcion']),
-            'detalle'           => implode(' | ', array_column($movs, 'descripcion')),
-            'tipo'              => $tipo,
-            'motivo'            => $motivo,
+            'concepto'          => '',
+            'comercio'          => '',
+            'detalle'           => '',
+            'tipo'              => 'ignorar',
+            'motivo'            => '',
             'categoria_id'      => null,
             'cuenta_destino_id' => null,
             'prestamo_id'       => null,
             'prestamo_tipo'     => null,
             'duplicado'         => false,
-        ];
+        ], $datos);
+    }
+
+    private function fila(array $movs, string $tipo, string $motivo): array
+    {
+        $mov = $movs[0];
+
+        return self::filaBase([
+            'fecha'      => $mov['fecha'],
+            'naturaleza' => $mov['naturaleza'],
+            'referencia' => $mov['referencia'],
+            'monto'      => round(array_sum(array_column($movs, 'monto')), 2),
+            'concepto'   => $this->resumir($mov['descripcion']),
+            'comercio'   => $this->contraparte($mov['descripcion']),
+            'detalle'    => implode(' | ', array_column($movs, 'descripcion')),
+            'tipo'       => $tipo,
+            'motivo'     => $motivo,
+        ]);
     }
 
     private function filaComision(array $grupo): array
     {
         $fila = $this->fila($grupo, 'gasto', 'Comisión bancaria');
         $fila['concepto']     = 'Comisiones bancarias';
+        $fila['comercio']     = 'COMISIONES BANCARIAS';
         $fila['categoria_id'] = $this->categoriaComisionesId();
         $fila['monto_iva']    = round(array_sum(array_map(
             fn ($m) => preg_match(self::PATRON_IVA, $m['descripcion']) ? $m['monto'] : 0,
@@ -167,23 +185,12 @@ class AfirmeClasificador
     /** Descripción corta para mostrar y usar como concepto. */
     public function resumir(string $descripcion): string
     {
-        // La leyenda "(DATO NO VERIFICADO...)" puede venir partida entre líneas
-        $desc = preg_replace('/\(\s*D\s*A\s*T\s*O\s+NO\s+VERIFICADO.*?\)/u', '', $descripcion);
-        $desc = trim(preg_replace('/\s+/u', ' ', $desc));
-        $campo = function (string $etiqueta, string $hasta) use ($desc) {
-            return preg_match("/(?<!RFC ){$etiqueta}:\s*(.*?)\s*(?={$hasta}|$)/u", $desc, $m) ? trim($m[1]) : null;
-        };
+        $desc = $this->limpiar($descripcion);
 
-        if (str_starts_with($desc, 'SPEI RECIBIDO')) {
-            $emisor   = $campo('EMISOR', 'RFC EMISOR:|CVE RASTREO:|CONCEPTO:|HORA:');
-            $concepto = $campo('CONCEPTO', 'HORA:');
-            return trim('SPEI de ' . ($emisor ?? 'desconocido') . ($concepto ? " — {$concepto}" : ''));
-        }
-
-        if (str_starts_with($desc, 'ENVIO SPEI')) {
-            $destinatario = $campo('DESTINATARIO', 'RFC DESTINATARIO:|CVE RASTREO:|CONCEPTO:');
-            $concepto     = $campo('CONCEPTO', 'HORA:');
-            return trim('SPEI a ' . ($destinatario ?? 'desconocido') . ($concepto ? " — {$concepto}" : ''));
+        if (str_starts_with($desc, 'SPEI RECIBIDO') || str_starts_with($desc, 'ENVIO SPEI')) {
+            $concepto = $this->campo($desc, 'CONCEPTO', 'HORA:');
+            $prefijo  = str_starts_with($desc, 'SPEI RECIBIDO') ? 'SPEI de ' : 'SPEI a ';
+            return trim($prefijo . ($this->contraparte($descripcion) ?: 'desconocido') . ($concepto ? " — {$concepto}" : ''));
         }
 
         if (str_starts_with($desc, 'DOMI-AMERICAN EXPRESS')) {
@@ -191,6 +198,35 @@ class AfirmeClasificador
         }
 
         return mb_strimwidth($desc, 0, 80, '…');
+    }
+
+    /** Quién envía o recibe el dinero; es la llave para aprender la categoría. */
+    public function contraparte(string $descripcion): string
+    {
+        $desc = $this->limpiar($descripcion);
+
+        if (str_starts_with($desc, 'SPEI RECIBIDO')) {
+            return (string) $this->campo($desc, 'EMISOR', 'RFC EMISOR:|CVE RASTREO:|CONCEPTO:|HORA:');
+        }
+        if (str_starts_with($desc, 'ENVIO SPEI')) {
+            return (string) $this->campo($desc, 'DESTINATARIO', 'RFC DESTINATARIO:|CVE RASTREO:|CONCEPTO:');
+        }
+        if (str_starts_with($desc, 'DOMI-AMERICAN EXPRESS')) {
+            return 'AMERICAN EXPRESS';
+        }
+        return mb_substr($desc, 0, 60);
+    }
+
+    private function limpiar(string $descripcion): string
+    {
+        // La leyenda "(DATO NO VERIFICADO...)" puede venir partida entre líneas
+        $desc = preg_replace('/\(\s*D\s*A\s*T\s*O\s+NO\s+VERIFICADO.*?\)/u', '', $descripcion);
+        return trim(preg_replace('/\s+/u', ' ', $desc));
+    }
+
+    private function campo(string $desc, string $etiqueta, string $hasta): ?string
+    {
+        return preg_match("/(?<!RFC ){$etiqueta}:\s*(.*?)\s*(?={$hasta}|$)/u", $desc, $m) ? trim($m[1]) : null;
     }
 
     /**
