@@ -3,9 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Banco;
-use App\Models\Categoria;
 use App\Models\Cuenta;
-use App\Models\Gasto;
 use App\Models\PagoPrestamo;
 use App\Models\Prestamo;
 use Illuminate\Http\Request;
@@ -95,39 +93,15 @@ class PrestamoController extends Controller
             'notas'     => 'nullable|string',
         ]);
 
-        $categoria = Categoria::firstOrCreate(
-            ['nombre' => 'Préstamos', 'tipo' => 'gasto']
-        );
-
-        $etiquetaTipo = $request->tipo === 'capital' ? 'capital' : 'interés';
-        $tieneIva     = $request->boolean('tiene_iva');
-        $montoIva     = $tieneIva ? round((float) $request->input('monto_iva', 0), 2) : 0;
-
-        $gasto = Gasto::create([
-            'negocio_id'   => $prestamo->negocio_id,
-            'categoria_id' => $categoria->id,
-            'cuenta_id'    => $request->cuenta_id,
-            'user_id'      => auth()->id(),
-            'monto'        => $request->monto,
-            'fecha'        => $request->fecha,
-            'concepto'     => "Pago préstamo ({$etiquetaTipo}): " . $prestamo->concepto,
-            'forma_pago'   => 'transferencia',
-            'notas'        => $request->notas,
-            'tiene_iva'    => $tieneIva,
-            'monto_iva'    => $montoIva,
-        ]);
-
-        PagoPrestamo::create([
-            'prestamo_id' => $prestamo->id,
-            'gasto_id'    => $gasto->id,
-            'fecha'       => $request->fecha,
-            'monto'       => $request->monto,
-            'tipo'        => $request->tipo,
-            'tiene_iva'   => $tieneIva,
-            'monto_iva'   => $montoIva,
-            'cuenta_id'   => $request->cuenta_id,
-            'notas'       => $request->notas,
-            'user_id'     => auth()->id(),
+        $prestamo->registrarPago([
+            'fecha'     => $request->fecha,
+            'monto'     => $request->monto,
+            'tipo'      => $request->tipo,
+            'tiene_iva' => $request->boolean('tiene_iva'),
+            'monto_iva' => $request->input('monto_iva', 0),
+            'cuenta_id' => $request->cuenta_id,
+            'notas'     => $request->notas,
+            'user_id'   => auth()->id(),
         ]);
 
         return redirect()->route('prestamos.show', $prestamo)->with('exito', 'Pago registrado correctamente.');

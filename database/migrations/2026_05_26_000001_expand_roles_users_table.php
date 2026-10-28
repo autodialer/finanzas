@@ -9,12 +9,15 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // Primero expandimos el enum para incluir ambos valores (viejo y nuevo)
-        DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'usuario', 'gerente', 'capturista') NOT NULL DEFAULT 'gerente'");
-        // Migramos los datos existentes
-        DB::statement("UPDATE users SET role = 'gerente' WHERE role = 'usuario'");
-        // Dejamos solo los valores nuevos
-        DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'gerente', 'capturista') NOT NULL DEFAULT 'gerente'");
+        // ALTER ... MODIFY solo existe en MySQL; en SQLite (pruebas) se omite
+        if (DB::getDriverName() === 'mysql') {
+            // Primero expandimos el enum para incluir ambos valores (viejo y nuevo)
+            DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'usuario', 'gerente', 'capturista') NOT NULL DEFAULT 'gerente'");
+            // Migramos los datos existentes
+            DB::statement("UPDATE users SET role = 'gerente' WHERE role = 'usuario'");
+            // Dejamos solo los valores nuevos
+            DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'gerente', 'capturista') NOT NULL DEFAULT 'gerente'");
+        }
 
         Schema::table('users', function (Blueprint $table) {
             $table->foreignId('negocio_id')->nullable()->after('role')->constrained('negocios')->nullOnDelete();
@@ -27,8 +30,10 @@ return new class extends Migration
             $table->dropForeign(['negocio_id']);
             $table->dropColumn('negocio_id');
         });
-        DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'gerente', 'capturista', 'usuario') NOT NULL DEFAULT 'gerente'");
-        DB::statement("UPDATE users SET role = 'usuario' WHERE role IN ('gerente', 'capturista')");
-        DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'usuario') NOT NULL DEFAULT 'usuario'");
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'gerente', 'capturista', 'usuario') NOT NULL DEFAULT 'gerente'");
+            DB::statement("UPDATE users SET role = 'usuario' WHERE role IN ('gerente', 'capturista')");
+            DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'usuario') NOT NULL DEFAULT 'usuario'");
+        }
     }
 };

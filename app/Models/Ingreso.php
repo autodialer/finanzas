@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Ingreso extends Model
 {
     protected $table = 'ingresos';
-    protected $fillable = ['negocio_id', 'categoria_id', 'cliente_id', 'cuenta_id', 'user_id', 'monto', 'fecha', 'concepto', 'forma_pago', 'notas', 'tiene_iva', 'monto_iva'];
+    protected $fillable = ['negocio_id', 'categoria_id', 'cliente_id', 'cuenta_id', 'user_id', 'monto', 'referencia', 'fecha', 'concepto', 'forma_pago', 'notas', 'tiene_iva', 'monto_iva'];
 
     protected $casts = ['tiene_iva' => 'boolean', 'monto_iva' => 'decimal:2'];
 

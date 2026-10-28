@@ -9,6 +9,9 @@
         <a href="{{ route('gastos.import.form') }}" class="btn btn-outline-danger btn-sm">
             <i class="bi bi-file-earmark-excel"></i> Importar Amex
         </a>
+        <a href="{{ route('importacion-afirme.create') }}" class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-file-earmark-pdf"></i> Importar Afirme
+        </a>
         <a href="{{ route('gastos.create') }}" class="btn btn-danger btn-sm">
             <i class="bi bi-plus-lg"></i> Nuevo Gasto
         </a>

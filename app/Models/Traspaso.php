@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Traspaso extends Model
 {
     protected $table = 'traspasos';
-    protected $fillable = ['fecha', 'cuenta_origen_id', 'cuenta_destino_id', 'monto', 'concepto', 'notas'];
+    protected $fillable = ['fecha', 'cuenta_origen_id', 'cuenta_destino_id', 'monto', 'referencia', 'concepto', 'notas'];
 
     public function cuentaOrigen()
     {
