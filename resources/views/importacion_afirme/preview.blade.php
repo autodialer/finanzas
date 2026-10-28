@@ -182,6 +182,11 @@
                             @if($plan)
                                 <div class="small mt-1"><a href="{{ route('compras-meses.show', $plan) }}" target="_blank">{{ $plan->descripcion }}</a></div>
                             @endif
+                            @if($previo = $msi['gasto_previo'] ?? null)
+                                <div class="small text-danger mt-1"><i class="bi bi-exclamation-triangle"></i>
+                                    Ya hay un gasto por ${{ number_format($previo['monto'], 2) }} el {{ \Carbon\Carbon::parse($previo['fecha'])->format('d/m/Y') }}
+                                    ("{{ $previo['concepto'] }}"): dar de alta el plan lo duplicaría.</div>
+                            @endif
                             @if($msi['mensualidad_registrada'] ?? false)
                                 <div class="small text-muted mt-1"><i class="bi bi-check2"></i> La mensualidad de este periodo ya está registrada como gasto.</div>
                             @elseif(($msi['mensualidades_previas'] ?? 0) > 0)

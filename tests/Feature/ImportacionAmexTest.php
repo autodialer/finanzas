@@ -197,6 +197,26 @@ class ImportacionAmexTest extends TestCase
         $this->assertSame(['2025-08-10', '2025-08-23'], [$meses[0]['sugerencia']['fecha_compra'], $meses[0]['sugerencia']['fecha_primer_cargo']]);
     }
 
+    public function test_compra_a_meses_ya_capturada_a_mano_no_se_sugiere_dar_de_alta(): void
+    {
+        // La compra de $900 a 3 meses (20-dic) ya se capturó a mano un día después; otra de $900 queda fuera de ±3 días
+        foreach (['2025-12-21' => 'Electrónica capturada a mano', '2025-12-28' => 'Otra compra'] as $fecha => $concepto) {
+            Gasto::create(['negocio_id' => $this->amex->negocio_id, 'categoria_id' => $this->otros->id, 'cuenta_id' => $this->amex->id,
+                'monto' => 900, 'fecha' => $fecha, 'concepto' => $concepto, 'forma_pago' => 'tarjeta']);
+        }
+
+        $this->subir();
+        $electronica = session('importacion_afirme.meses')[1];
+
+        $this->assertSame(C::CREAR, $electronica['accion']);
+        $this->assertSame(['fecha' => '2025-12-21', 'concepto' => 'Electrónica capturada a mano', 'monto' => 900.0],
+            array_diff_key($electronica['gasto_previo'], ['id' => true]));
+        $this->assertSame('ignorar', $electronica['accion_sugerida']);
+        $this->assertNull(session('importacion_afirme.meses')[0]['gasto_previo']);
+
+        $this->get(route('importacion-afirme.preview'))->assertSee('dar de alta el plan lo duplicaría');
+    }
+
     public function test_mensualidades_que_ya_se_registraban_como_gasto_siguen_igual(): void
     {
         $this->mensualidadesAnteriores();

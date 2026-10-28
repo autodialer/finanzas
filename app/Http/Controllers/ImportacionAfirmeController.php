@@ -214,8 +214,9 @@ class ImportacionAfirmeController extends Controller
     private function conciliarMeses(Cuenta $cuenta, array $msi, array $estado): array
     {
         $conciliador = new ConciliadorComprasMeses($cuenta);
+        $usados = [];
 
-        return array_map(function ($renglon) use ($conciliador, $estado) {
+        return array_map(function ($renglon) use ($conciliador, $estado, $cuenta, &$usados) {
             $pago = (float) $renglon['pago_requerido'];
             $renglon += [
                 'mensualidad'    => $pago,
@@ -229,8 +230,42 @@ class ImportacionAfirmeController extends Controller
             [$sugerida] = $this->sugeridor->sugerir([['naturaleza' => 'retiro', 'comercio' => $renglon['comercio'] ?? $renglon['descripcion'], 'categoria_id' => null, 'motivo' => '']]);
 
             $renglon += $conciliador->conciliar($renglon) + ['categoria_id' => $sugerida['categoria_id']];
+            $renglon['gasto_previo'] = $this->gastoPrevioDeLaCompra($cuenta, $renglon, $usados);
             return $renglon + ['accion_sugerida' => $this->accionSugeridaMeses($renglon)];
         }, $msi);
+    }
+
+    private const DIAS_TOLERANCIA_GASTO_PREVIO = 3;
+
+    /**
+     * Dar de alta una compra a meses crea un gasto por el monto original. Si esa
+     * compra ya se capturó como gasto (a mano, sin plan) por el mismo monto cerca
+     * de la fecha de compra, el alta la duplicaría. Cada gasto marca una sola compra.
+     */
+    private function gastoPrevioDeLaCompra(Cuenta $cuenta, array $renglon, array &$usados): ?array
+    {
+        $fecha = $renglon['sugerencia']['fecha_compra'] ?? null;
+        if (!$fecha || !in_array($renglon['accion'], [ConciliadorComprasMeses::CREAR, ConciliadorComprasMeses::SIN_PLAN], true)) {
+            return null;
+        }
+
+        $gasto = Gasto::where('cuenta_id', $cuenta->id)
+            ->whereDoesntHave('compraMeses')
+            ->where('monto', round((float) $renglon['monto_original'], 2))
+            ->whereBetween('fecha', [
+                Carbon::parse($fecha)->subDays(self::DIAS_TOLERANCIA_GASTO_PREVIO)->toDateString(),
+                Carbon::parse($fecha)->addDays(self::DIAS_TOLERANCIA_GASTO_PREVIO)->toDateString(),
+            ])
+            ->whereNotIn('id', $usados)
+            ->get()
+            ->sortBy(fn ($g) => abs(Carbon::parse($g->fecha)->diffInDays(Carbon::parse($fecha), false)))
+            ->first();
+        if (!$gasto) {
+            return null;
+        }
+
+        $usados[] = $gasto->id;
+        return ['id' => $gasto->id, 'fecha' => Carbon::parse($gasto->fecha)->toDateString(), 'concepto' => $gasto->concepto, 'monto' => (float) $gasto->monto];
     }
 
     /**
@@ -243,7 +278,7 @@ class ImportacionAfirmeController extends Controller
     private function accionSugeridaMeses(array $renglon): string
     {
         $puedeAlta = in_array($renglon['accion'], [ConciliadorComprasMeses::CREAR, ConciliadorComprasMeses::SIN_PLAN], true);
-        if (!$puedeAlta || ($renglon['mensualidad_registrada'] ?? false)) {
+        if (!$puedeAlta || ($renglon['mensualidad_registrada'] ?? false) || ($renglon['gasto_previo'] ?? null)) {
             return 'ignorar';
         }
         $esAmex = array_key_exists('mensualidades_previas', $renglon);
