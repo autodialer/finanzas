@@ -99,6 +99,27 @@ class AmexParserTest extends TestCase
         $this->assertSame('MSI005', $estado['msi'][0]['referencia']);
     }
 
+    public function test_salto_de_pagina_con_leyenda_fiscal_en_el_encabezado(): void
+    {
+        // Encabezado con "Este no es un documento con validez fiscal": no debe tomarse como descripción
+        $encabezado = "\nEstado de Cuenta\nPágina 6\nNúmero de Cuenta FechaSiguiente Fecha\nTarjetahabiente\t3700-000000-01111 de Corte de Corte\n"
+            . "PERSONA TITULAR FICTICIA\t22-Ene-2026 22-Feb-2026 \nEste no es un documento con validez fiscal\nFecha y Detalle de las operaciones\tImporte en MN.\n";
+        $estado = $this->parsear([
+            "LIBRERIA INVENTADA      MONTERREY\nCARGO 05 DE 12\nRFCBBB010101BB2 /REFMSI005\n250.00"
+                => "LIBRERIA INVENTADA      MONTERREY\n250.00" . $encabezado . "CARGO 05 DE 12\nRFCBBB010101BB2 /REFMSI005",
+            "SERVICIO NUBE FALSO     SAN FRANCISCO\nDólar U.S.A.         10.00\n180.00"
+                => "SERVICIO NUBE FALSO     SAN FRANCISCO\n180.00" . $encabezado . "Dólar U.S.A.         10.00",
+        ]);
+
+        $this->assertSame([], $estado['errores']);
+        $libreria = $this->movimiento($estado, 'LIBRERIA');
+        $this->assertSame(['mensualidad', ['numero' => 5, 'total' => 12], 'MSI005', '2025-12-23'],
+            [$libreria['clase'], $libreria['mensualidad'], $libreria['referencia'], $libreria['fecha']]);
+        $this->assertSame(['USD', 10.0], [$this->movimiento($estado, 'SERVICIO NUBE')['moneda'], $this->movimiento($estado, 'SERVICIO NUBE')['monto_moneda']]);
+        $this->assertSame(550.0, collect($estado['movimientos'])->where('clase', 'mensualidad')->sum('monto'));
+        $this->assertNull(collect($estado['movimientos'])->first(fn ($m) => str_contains($m['descripcion'], 'validez fiscal')));
+    }
+
     public function test_salto_de_pagina_completa_la_moneda_del_ultimo_movimiento(): void
     {
         $estado = $this->parsear(["SERVICIO NUBE FALSO     SAN FRANCISCO\nDólar U.S.A.         10.00\n180.00"

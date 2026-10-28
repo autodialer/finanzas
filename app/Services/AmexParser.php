@@ -37,6 +37,9 @@ class AmexParser
     private const RUIDO = [
         '/^Estado de Cuenta$/u', '/^P[áa]gina\s+\d+$/u', '/^N[úu]mero de Cuenta FechaSiguiente Fecha/u', '/^Tarjetahabiente\s/u',
         '/\d{2}-[A-Za-z]{3}-\d{4}\s+\d{2}-[A-Za-z]{3}-\d{4}\s*$/u', '/^Fecha y Detalle de las operaciones/u',
+        // Leyenda del encabezado en algunos estados de cuenta: si se tomara como descripción, las líneas
+        // sueltas al inicio de la página ("CARGO 03 DE 06", RFC) ya no se unirían al movimiento anterior
+        '/^Este no es un documento con validez fiscal\.?$/iu',
     ];
     private const RUIDO_MSI = '/^(Fecha|Original|Monto|Tasa de|inter[ée]s|anual|Saldo|pendiente|Pendiente|N[úu]mero|de|Mensualidad|total a|pagar|Diferido|Comisi[óo]n|Mensual\*|IVA\)|Resumen de Planes de Pagos Diferidos.*)$/u';
 
