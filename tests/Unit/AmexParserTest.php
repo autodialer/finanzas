@@ -130,6 +130,16 @@ class AmexParserTest extends TestCase
         $this->assertSame(['USD', 10.0, 180.0], [$nube['moneda'], $nube['monto_moneda'], $nube['monto']]);
     }
 
+    public function test_monto_en_moneda_extranjera_menor_a_uno_sin_cero_inicial(): void
+    {
+        // El estado de cuenta imprime 0.80 euros como ",80"
+        $estado = $this->parsear(['Euro      1.234,56' => 'Euro        ,80']);
+
+        $this->assertSame([], $estado['errores']);
+        $hotel = $this->movimiento($estado, 'HOTEL FICTICIO');
+        $this->assertSame(['HOTEL FICTICIO MADRID MADRID', 'EUR', 0.8], [$hotel['descripcion'], $hotel['moneda'], $hotel['monto_moneda']]);
+    }
+
     public function test_moneda_extranjera_en_el_formato_de_cada_moneda(): void
     {
         $estado = $this->parsear();
@@ -141,6 +151,7 @@ class AmexParserTest extends TestCase
         $this->assertSame(2000.0, AmexParser::montoMoneda('2,000.00'));
         $this->assertSame(100.15, AmexParser::montoMoneda('100,15'));
         $this->assertSame(391.87, AmexParser::montoMoneda('391,87'));
+        $this->assertSame(0.8, AmexParser::montoMoneda(',80'));
     }
 
     public function test_lee_meses_sin_intereses_y_los_empareja_con_su_cargo(): void

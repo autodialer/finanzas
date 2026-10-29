@@ -161,7 +161,7 @@ class AmexParser
         return round((float) str_replace(',', '', $importe), 2);
     }
 
-    // Monto en moneda extranjera: cada moneda usa su formato ("2,000.00", "1.669,72", "100,15", "1,821")
+    // Monto en moneda extranjera: cada moneda usa su formato ("2,000.00", "1.669,72", "100,15", "1,821", ",80")
     public static function montoMoneda(string $texto): float
     {
         if (preg_match('/^(.*)[.,](\d{2})$/', $texto, $m)) {
@@ -329,7 +329,7 @@ class AmexParser
                 continue;
             }
             // Renglón de moneda extranjera; sin descripción previa (salto de página) solo si es una moneda conocida
-            if (preg_match('/^([A-Za-zÁÉÍÓÚáéíóúÑñ .]+?)\s{2,}(\d[\d.,]*)$/u', $resto, $m)
+            if (preg_match('/^([A-Za-zÁÉÍÓÚáéíóúÑñ .]+?)\s{2,}([\d.,]*\d)$/u', $resto, $m)
                 && ($actual['descripcion'] || isset(self::MONEDAS[mb_strtoupper(trim($m[1]))]))) {
                 $nombre = mb_strtoupper(trim($m[1]));
                 $actual['moneda'] = self::MONEDAS[$nombre] ?? trim($m[1]);
