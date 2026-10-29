@@ -42,10 +42,11 @@ class CompraMeses extends Model
      * Crea el gasto por el monto original (fecha de compra, cargado a la tarjeta)
      * y el plan ligado a él. $datos son los campos del plan, sin gasto_id.
      */
-    public static function registrar(Cuenta $cuenta, array $datos, int $categoriaId, bool $tieneIva, ?int $userId, ?string $notasGasto = null): self
+    // $negocioId: negocio del gasto si no es el de la tarjeta (p. ej. elegido al importar el estado de cuenta)
+    public static function registrar(Cuenta $cuenta, array $datos, int $categoriaId, bool $tieneIva, ?int $userId, ?string $notasGasto = null, ?int $negocioId = null): self
     {
-        return DB::transaction(function () use ($cuenta, $datos, $categoriaId, $tieneIva, $userId, $notasGasto) {
-            $gasto = Gasto::create(self::datosGasto($cuenta, $datos, $categoriaId, $tieneIva, $notasGasto) + ['user_id' => $userId]);
+        return DB::transaction(function () use ($cuenta, $datos, $categoriaId, $tieneIva, $userId, $notasGasto, $negocioId) {
+            $gasto = Gasto::create(self::datosGasto($cuenta, $datos, $categoriaId, $tieneIva, $notasGasto, $negocioId) + ['user_id' => $userId]);
             return self::create($datos + ['gasto_id' => $gasto->id]);
         });
     }
@@ -53,17 +54,18 @@ class CompraMeses extends Model
     public function actualizar(Cuenta $cuenta, array $datos, int $categoriaId, bool $tieneIva): void
     {
         DB::transaction(function () use ($cuenta, $datos, $categoriaId, $tieneIva) {
-            $this->gasto->update(self::datosGasto($cuenta, $datos, $categoriaId, $tieneIva));
+            // Al editar el plan se conserva el negocio que ya tenía el gasto
+            $this->gasto->update(self::datosGasto($cuenta, $datos, $categoriaId, $tieneIva, null, $this->gasto->negocio_id));
             $this->update($datos);
         });
     }
 
-    private static function datosGasto(Cuenta $cuenta, array $datos, int $categoriaId, bool $tieneIva, ?string $notas = null): array
+    private static function datosGasto(Cuenta $cuenta, array $datos, int $categoriaId, bool $tieneIva, ?string $notas = null, ?int $negocioId = null): array
     {
         $monto = (float) $datos['monto_original'];
 
         return [
-            'negocio_id'   => $cuenta->negocio_id,
+            'negocio_id'   => $negocioId ?? $cuenta->negocio_id,
             'categoria_id' => $categoriaId,
             'cuenta_id'    => $cuenta->id,
             'monto'        => $monto,

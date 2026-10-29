@@ -7,11 +7,16 @@ use Illuminate\Database\Eloquent\Model;
 class ReglaCategoria extends Model
 {
     protected $table = 'reglas_categoria';
-    protected $fillable = ['comercio', 'tipo', 'categoria_id'];
+    protected $fillable = ['comercio', 'tipo', 'categoria_id', 'negocio_id'];
 
     public function categoria()
     {
         return $this->belongsTo(Categoria::class);
+    }
+
+    public function negocio()
+    {
+        return $this->belongsTo(Negocio::class);
     }
 
     // Clave estable para un comercio: mayúsculas, sin signos ni espacios repetidos

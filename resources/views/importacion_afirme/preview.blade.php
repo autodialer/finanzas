@@ -228,6 +228,13 @@
                                         @endif
                                     </select>
                                 </div>
+                                <div class="col-12">
+                                    <select name="meses[{{ $i }}][negocio_id]" class="form-select form-select-sm" title="Negocio al que pertenece el gasto">
+                                        @foreach($negocios as $negocio)
+                                            <option value="{{ $negocio->id }}" @selected(old("meses.$i.negocio_id", $msi['negocio_id'] ?? $cuenta->negocio_id) == $negocio->id)>{{ $negocio->nombre }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
                                 <div class="col-6">
                                     <label class="small text-muted">Meses</label>
                                     <input type="number" min="1" max="60" name="meses[{{ $i }}][meses]" class="form-control form-control-sm" value="{{ old("meses.$i.meses", $sug['meses']) }}">
@@ -267,7 +274,7 @@
                         <th style="min-width: 280px">Descripción</th>
                         <th class="text-end">Monto</th>
                         <th>Tipo</th>
-                        <th style="min-width: 240px">Categoría / destino</th>
+                        <th style="min-width: 240px">Categoría y negocio / destino</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -325,6 +332,11 @@
                                         </optgroup>
                                     @endif
                                 </select>
+                                <select name="filas[{{ $i }}][negocio_id]" class="form-select form-select-sm mt-1" title="Negocio al que pertenece el gasto" @disabled($tipo !== 'gasto')>
+                                    @foreach($negocios as $negocio)
+                                        <option value="{{ $negocio->id }}" @selected(old("filas.$i.negocio_id", $fila['negocio_id'] ?? $cuenta->negocio_id) == $negocio->id)>{{ $negocio->nombre }}</option>
+                                    @endforeach
+                                </select>
                             </div>
                             <div class="campo-tipo" data-para="ingreso">
                                 <select name="filas[{{ $i }}][categoria_id]" class="form-select form-select-sm" @disabled($tipo !== 'ingreso')>
@@ -366,7 +378,7 @@
             </table>
         </div>
         <div class="card-footer d-flex justify-content-between align-items-center">
-            <span class="small text-muted">Las filas en "Ignorar" no se guardan. La categoría que elijas se recordará para cada comercio.</span>
+            <span class="small text-muted">Las filas en "Ignorar" no se guardan. La categoría y el negocio que elijas se recordarán para cada comercio.</span>
             <button type="submit" class="btn btn-success">
                 <i class="bi bi-check-lg me-1"></i>Confirmar importación
             </button>

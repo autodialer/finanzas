@@ -206,6 +206,33 @@ class ImportacionAfirmeTarjetaTest extends TestCase
         $this->assertSame($this->otros->id, $filas->firstWhere('monto', 50.0)['categoria_id']);
     }
 
+    public function test_el_gasto_se_guarda_en_el_negocio_elegido_y_se_recuerda(): void
+    {
+        $avion = Negocio::create(['nombre' => 'Avión Ficticio']);
+        $filas = $this->subir()['filas'];
+
+        // Por defecto se propone el negocio de la tarjeta
+        $this->assertSame($this->tarjeta->negocio_id, $filas[5]['negocio_id']);
+
+        // "TIENDA SIN CLAVE" (fila 5) se asigna a otro negocio
+        $this->confirmarSugerencias($filas, [5 => ['negocio_id' => $avion->id]]);
+
+        $this->assertSame($avion->id, Gasto::where('monto', 300)->value('negocio_id'));
+        $this->assertSame($this->tarjeta->negocio_id, Gasto::where('monto', 800)->value('negocio_id'));
+        $this->assertSame($avion->id, ReglaCategoria::where('comercio', 'TIENDA SIN CLAVE')->value('negocio_id'));
+    }
+
+    public function test_el_negocio_aprendido_se_sugiere_en_la_siguiente_importacion(): void
+    {
+        $avion = Negocio::create(['nombre' => 'Avión Ficticio']);
+        ReglaCategoria::create(['comercio' => 'TIENDA SIN CLAVE', 'tipo' => 'gasto', 'categoria_id' => $this->otros->id, 'negocio_id' => $avion->id]);
+
+        $filas = collect($this->subir()['filas']);
+
+        $this->assertSame($avion->id, $filas->firstWhere('monto', 300.0)['negocio_id']);
+        $this->assertSame($this->tarjeta->negocio_id, $filas->firstWhere('monto', 800.0)['negocio_id']);
+    }
+
     public function test_las_reglas_tambien_aplican_a_la_cuenta_vision(): void
     {
         $proveedores = Categoria::create(['nombre' => 'Proveedores', 'tipo' => 'gasto']);

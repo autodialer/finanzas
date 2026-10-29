@@ -86,7 +86,7 @@ class ImportacionAfirmeController extends Controller
             'cuenta_id'        => $cuenta->id,
             'archivo'          => $request->file('archivo')->getClientOriginalName(),
             'estado'           => array_diff_key($estado, ['movimientos' => true, 'msi' => true, 'errores' => true]),
-            'filas'            => $this->sugeridor->sugerir($filas),
+            'filas'            => $this->conNegocio($this->sugeridor->sugerir($filas), $cuenta),
             'meses'            => $meses,
         ]]);
 
@@ -120,12 +120,13 @@ class ImportacionAfirmeController extends Controller
         $cuentas   = $this->aplicarFiltroNegocio(Cuenta::with('negocio'))->where('id', '!=', $cuenta->id)->orderBy('nombre')->get();
         $prestamos = $this->aplicarFiltroNegocio(Prestamo::with('banco'))->orderBy('concepto')->get();
         $categoriasNuevas = $this->sugeridor->categoriasNuevas();
+        $negocios = $this->negociosVisibles()->sortBy('nombre');
         $meses   = $importacion['meses'] ?? [];
         $compras = CompraMeses::whereIn('id', array_filter(array_column($meses, 'compra_id')))->get()->keyBy('id');
 
         return view('importacion_afirme.preview', compact(
             'importacion', 'cuenta', 'estado', 'filas', 'cuentaDistinta',
-            'categoriasGasto', 'categoriasIngreso', 'categoriasNuevas', 'cuentas', 'prestamos', 'meses', 'compras'
+            'categoriasGasto', 'categoriasIngreso', 'categoriasNuevas', 'negocios', 'cuentas', 'prestamos', 'meses', 'compras'
         ));
     }
 
@@ -176,10 +177,10 @@ class ImportacionAfirmeController extends Controller
                 $this->guardarFila($fila, $entrada, $cuenta, $importacion);
                 $totales[$entrada['tipo']]++;
             }
-            foreach ($altasMeses as [$datos, $categoria]) {
+            foreach ($altasMeses as [$datos, $categoria, $negocioId]) {
                 $categoriaId = $this->sugeridor->resolver($categoria);
-                $this->sugeridor->aprender($datos['descripcion'], 'gasto', $categoriaId);
-                CompraMeses::registrar($cuenta, $datos, $categoriaId, false, auth()->id(), "Importado de {$importacion['archivo']}");
+                $this->sugeridor->aprender($datos['descripcion'], 'gasto', $categoriaId, $negocioId);
+                CompraMeses::registrar($cuenta, $datos, $categoriaId, false, auth()->id(), "Importado de {$importacion['archivo']}", $negocioId);
             }
             foreach ($mensualidades as [$renglon, $entrada]) {
                 $this->guardarMensualidad($renglon, $entrada, $cuenta, $importacion);
@@ -227,9 +228,9 @@ class ImportacionAfirmeController extends Controller
             $renglon['fecha'] ??= $estado['periodo_fin'];
 
             // Categoría sugerida para el gasto de la compra (regla aprendida o palabra clave)
-            [$sugerida] = $this->sugeridor->sugerir([['naturaleza' => 'retiro', 'comercio' => $renglon['comercio'] ?? $renglon['descripcion'], 'categoria_id' => null, 'motivo' => '']]);
+            [$sugerida] = $this->conNegocio($this->sugeridor->sugerir([['naturaleza' => 'retiro', 'comercio' => $renglon['comercio'] ?? $renglon['descripcion'], 'categoria_id' => null, 'motivo' => '']]), $cuenta);
 
-            $renglon += $conciliador->conciliar($renglon) + ['categoria_id' => $sugerida['categoria_id']];
+            $renglon += $conciliador->conciliar($renglon) + ['categoria_id' => $sugerida['categoria_id'], 'negocio_id' => $sugerida['negocio_id']];
             $renglon['gasto_previo'] = $this->gastoPrevioDeLaCompra($cuenta, $renglon, $usados);
             return $renglon + ['accion_sugerida' => $this->accionSugeridaMeses($renglon)];
         }, $msi);
@@ -305,7 +306,7 @@ class ImportacionAfirmeController extends Controller
             }
 
             if ($accion === 'mensualidad') {
-                $error = $this->validarMensualidad($renglon, $entrada);
+                $error = $this->validarMensualidad($renglon, $entrada) ?? $this->errorNegocio($entrada);
                 if ($error) {
                     $errores["meses.{$i}"] = 'Compra a meses ' . ($i + 1) . " ({$renglon['descripcion']}): {$error}";
                 } else {
@@ -315,6 +316,7 @@ class ImportacionAfirmeController extends Controller
             }
 
             [$datos, $error] = $this->validarAltaMeses($renglon, $entrada, $cuenta);
+            $error ??= $this->errorNegocio($entrada);
             if (!$error && $conciliador->conciliar($renglon)['compra_id']) {
                 $error = 'ya existe un plan para esta compra.';
             }
@@ -322,7 +324,7 @@ class ImportacionAfirmeController extends Controller
                 $errores["meses.{$i}"] = 'Compra a meses ' . ($i + 1) . " ({$renglon['descripcion']}): {$error}";
                 continue;
             }
-            $altas[] = [$datos, $entrada['categoria_id']];
+            $altas[] = [$datos, $entrada['categoria_id'], $this->negocioElegido($entrada, $cuenta)];
         }
 
         return [$altas, $mensualidades, $errores];
@@ -344,10 +346,11 @@ class ImportacionAfirmeController extends Controller
     private function guardarMensualidad(array $renglon, array $entrada, Cuenta $cuenta, array $importacion): void
     {
         $categoriaId = $this->sugeridor->resolver($entrada['categoria_id']);
-        $this->sugeridor->aprender($renglon['comercio'] ?? $renglon['descripcion'], 'gasto', $categoriaId);
+        $negocioId   = $this->negocioElegido($entrada, $cuenta);
+        $this->sugeridor->aprender($renglon['comercio'] ?? $renglon['descripcion'], 'gasto', $categoriaId, $negocioId);
 
         Gasto::create([
-            'negocio_id'   => $cuenta->negocio_id,
+            'negocio_id'   => $negocioId,
             'categoria_id' => $categoriaId,
             'cuenta_id'    => $cuenta->id,
             'user_id'      => auth()->id(),
@@ -420,6 +423,39 @@ class ImportacionAfirmeController extends Controller
         return (bool) preg_match('/american express/i', (string) $cuenta->banco?->nombre);
     }
 
+    // Negocio sugerido para cada fila: el aprendido para el comercio (si el usuario lo puede ver) o el de la cuenta
+    private function conNegocio(array $filas, Cuenta $cuenta): array
+    {
+        $permitidos = $this->negociosPermitidos();
+
+        return array_map(function ($fila) use ($cuenta, $permitidos) {
+            $aprendido = $fila['negocio_id'] ?? null;
+            $valido = $aprendido && ($permitidos === null || $permitidos->contains($aprendido));
+            if ($valido && (int) $aprendido !== (int) $cuenta->negocio_id) {
+                $fila['motivo'] = ($fila['motivo'] ?? '') . ' · negocio aprendido';
+            }
+            $fila['negocio_id'] = $valido ? (int) $aprendido : $cuenta->negocio_id;
+            return $fila;
+        }, $filas);
+    }
+
+    // Sin negocio en el formulario se usa el de la cuenta
+    private function negocioElegido(array $entrada, Cuenta $cuenta): int
+    {
+        return (int) ($entrada['negocio_id'] ?? 0) ?: $cuenta->negocio_id;
+    }
+
+    private function errorNegocio(array $entrada): ?string
+    {
+        $id = (int) ($entrada['negocio_id'] ?? 0);
+        if ($id === 0) {
+            return null;
+        }
+        $permitidos = $this->negociosPermitidos();
+        $existe = \App\Models\Negocio::whereKey($id)->exists();
+        return $existe && ($permitidos === null || $permitidos->contains($id)) ? null : 'selecciona un negocio válido.';
+    }
+
     private function validarFila(array $fila, array $entrada, Cuenta $cuenta): ?string
     {
         $tipo = $entrada['tipo'];
@@ -436,7 +472,10 @@ class ImportacionAfirmeController extends Controller
         }
 
         if ($tipo === 'gasto' || $tipo === 'ingreso') {
-            return $this->sugeridor->esValida($entrada['categoria_id'] ?? null, $tipo) ? null : 'selecciona una categoría.';
+            if (!$this->sugeridor->esValida($entrada['categoria_id'] ?? null, $tipo)) {
+                return 'selecciona una categoría.';
+            }
+            return $tipo === 'gasto' ? $this->errorNegocio($entrada) : null;
         }
 
         if ($tipo === 'traspaso') {
@@ -461,15 +500,17 @@ class ImportacionAfirmeController extends Controller
         $notas    = "Importado de {$importacion['archivo']}: {$fila['detalle']}";
 
         // La categoría elegida queda como regla para el comercio en las siguientes importaciones
+        // y, si es gasto, también el negocio al que se asignó
         if (in_array($entrada['tipo'], ['gasto', 'ingreso'], true)) {
             $categoriaId = $this->sugeridor->resolver($entrada['categoria_id']);
-            $this->sugeridor->aprender($fila['comercio'] ?? null, $entrada['tipo'], $categoriaId);
+            $negocioId   = $entrada['tipo'] === 'gasto' ? $this->negocioElegido($entrada, $cuenta) : null;
+            $this->sugeridor->aprender($fila['comercio'] ?? null, $entrada['tipo'], $categoriaId, $negocioId);
         }
 
         switch ($entrada['tipo']) {
             case 'gasto':
                 Gasto::create([
-                    'negocio_id'   => $cuenta->negocio_id,
+                    'negocio_id'   => $negocioId,
                     'categoria_id' => $categoriaId,
                     'cuenta_id'    => $cuenta->id,
                     'user_id'      => auth()->id(),

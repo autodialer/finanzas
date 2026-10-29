@@ -14,6 +14,9 @@ use App\Models\ReglaCategoria;
  * ("UBER TRIP HTTPS HELP UB"): si no hay regla exacta, vale una que empiece
  * con el comercio completo.
  *
+ * La regla también recuerda el negocio al que se asignó el gasto la última vez
+ * (fila['negocio_id']); si no hay, queda el de la cuenta.
+ *
  * Las categorías de las palabras clave que todavía no existen se proponen
  * como "nueva:<nombre>" y se crean solo al confirmar la importación.
  */
@@ -49,6 +52,9 @@ class SugeridorCategoria
             if ($regla && ($fila['comercio'] ?? '') !== '') {
                 $fila['categoria_id'] = $regla->categoria_id;
                 $fila['motivo'] .= ' · categoría aprendida';
+                if ($tipo === 'gasto' && $regla->negocio_id) {
+                    $fila['negocio_id'] = $regla->negocio_id;
+                }
             } elseif ($fila['categoria_id'] === null && $tipo === 'gasto' && ($nombre = $this->porPalabraClave($fila['comercio'] ?? ''))) {
                 $fila['categoria_id'] = $this->valorCategoria($nombre);
                 $fila['motivo'] .= " · palabra clave ({$nombre})";
@@ -131,12 +137,16 @@ class SugeridorCategoria
         return (int) $valor;
     }
 
-    public function aprender(?string $comercio, string $tipo, int $categoriaId): void
+    public function aprender(?string $comercio, string $tipo, int $categoriaId, ?int $negocioId = null): void
     {
         $clave = ReglaCategoria::normalizar($comercio);
         if ($clave === '') {
             return;
         }
-        ReglaCategoria::updateOrCreate(['comercio' => $clave, 'tipo' => $tipo], ['categoria_id' => $categoriaId]);
+        $datos = ['categoria_id' => $categoriaId];
+        if ($negocioId) {
+            $datos['negocio_id'] = $negocioId;
+        }
+        ReglaCategoria::updateOrCreate(['comercio' => $clave, 'tipo' => $tipo], $datos);
     }
 }
