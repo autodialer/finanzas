@@ -79,6 +79,20 @@ Route::middleware('auth')->group(function () {
 
 // Gestión de usuarios (solo admin)
 Route::middleware(['auth', 'es_admin'])->group(function () {
+    // Impuestos: RFCs, e.firma, facturas del SAT y gastos sin factura
+    Route::resource('contribuyentes', \App\Http\Controllers\ContribuyenteController::class);
+    Route::post('contribuyentes/{contribuyente}/descargar', [\App\Http\Controllers\ContribuyenteController::class, 'descargar'])->name('contribuyentes.descargar');
+    Route::post('contribuyentes/{contribuyente}/verificar', [\App\Http\Controllers\ContribuyenteController::class, 'verificar'])->name('contribuyentes.verificar');
+    Route::get('facturas', [\App\Http\Controllers\FacturaController::class, 'index'])->name('facturas.index');
+    Route::get('facturas/sin-factura', [\App\Http\Controllers\FacturaController::class, 'faltantes'])->name('facturas.faltantes');
+    Route::post('facturas/subir', [\App\Http\Controllers\FacturaController::class, 'subir'])->name('facturas.subir');
+    Route::post('facturas/vincular', [\App\Http\Controllers\FacturaController::class, 'vincular'])->name('facturas.vincular');
+    Route::post('facturas/conciliar/{contribuyente}', [\App\Http\Controllers\FacturaController::class, 'conciliar'])->name('facturas.conciliar');
+    Route::get('facturas/{cfdi}/xml', [\App\Http\Controllers\FacturaController::class, 'xml'])->name('facturas.xml');
+    Route::post('facturas/{cfdi}/desvincular', [\App\Http\Controllers\FacturaController::class, 'desvincular'])->name('facturas.desvincular');
+    Route::post('gastos/{gasto}/sin-factura', [\App\Http\Controllers\FacturaController::class, 'sinFactura'])->name('facturas.sin-factura');
+    Route::post('gastos/{gasto}/requiere-factura', [\App\Http\Controllers\FacturaController::class, 'requiereFactura'])->name('facturas.requiere-factura');
+
     Route::resource('usuarios', UserController::class);
     Route::post('usuarios/{usuario}/reset-link', [UserController::class, 'generarEnlaceReset'])->name('usuarios.reset-link');
 });

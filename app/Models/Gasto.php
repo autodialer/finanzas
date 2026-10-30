@@ -7,9 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 class Gasto extends Model
 {
     protected $table = 'gastos';
-    protected $fillable = ['negocio_id', 'categoria_id', 'proveedor_id', 'cuenta_id', 'user_id', 'monto', 'referencia', 'fecha', 'concepto', 'forma_pago', 'notas', 'tiene_iva', 'monto_iva', 'tiene_propina', 'porcentaje_propina', 'monto_propina'];
+    protected $fillable = ['negocio_id', 'categoria_id', 'proveedor_id', 'cuenta_id', 'user_id', 'monto', 'referencia', 'fecha', 'concepto', 'forma_pago', 'notas', 'tiene_iva', 'monto_iva', 'tiene_propina', 'porcentaje_propina', 'monto_propina', 'requiere_factura', 'motivo_sin_factura'];
 
-    protected $casts = ['tiene_iva' => 'boolean', 'monto_iva' => 'decimal:2', 'tiene_propina' => 'boolean', 'monto_propina' => 'decimal:2'];
+    protected $casts = ['tiene_iva' => 'boolean', 'monto_iva' => 'decimal:2', 'tiene_propina' => 'boolean', 'monto_propina' => 'decimal:2', 'requiere_factura' => 'boolean'];
 
     public function getMontoBaseAttribute(): float
     {
@@ -39,5 +39,11 @@ class Gasto extends Model
     public function compraMeses()
     {
         return $this->hasOne(CompraMeses::class);
+    }
+
+    // Facturas (CFDI recibidos) que amparan este gasto
+    public function cfdis()
+    {
+        return $this->hasMany(Cfdi::class);
     }
 }

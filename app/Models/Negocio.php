@@ -9,6 +9,12 @@ class Negocio extends Model
     protected $table = 'negocios';
     protected $fillable = ['nombre', 'descripcion'];
 
+    // RFC al que pertenecen los gastos e ingresos de este negocio
+    public function contribuyente()
+    {
+        return $this->belongsTo(Contribuyente::class);
+    }
+
     public function cuentas()
     {
         return $this->hasMany(Cuenta::class);

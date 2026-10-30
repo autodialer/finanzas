@@ -124,6 +124,19 @@
                 </nav>
 
                 @if(auth()->user()->isAdmin())
+                <div class="nav-header mb-2">Impuestos</div>
+                <nav class="nav flex-column mb-3">
+                    <a href="{{ route('facturas.faltantes') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('facturas.faltantes') ? 'active' : '' }}">
+                        <i class="bi bi-exclamation-triangle me-2"></i>Gastos sin factura
+                    </a>
+                    <a href="{{ route('facturas.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('facturas.index') ? 'active' : '' }}">
+                        <i class="bi bi-receipt me-2"></i>Facturas SAT
+                    </a>
+                    <a href="{{ route('contribuyentes.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('contribuyentes*') ? 'active' : '' }}">
+                        <i class="bi bi-person-badge-fill me-2"></i>Contribuyentes
+                    </a>
+                </nav>
+
                 <div class="nav-header mb-2">Administración</div>
                 <nav class="nav flex-column mb-3">
                     <a href="{{ route('usuarios.index') }}" class="nav-link px-2 py-1 mb-1 {{ request()->routeIs('usuarios*') ? 'active' : '' }}">
@@ -182,6 +195,9 @@
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('bancos.index') }}">Bancos</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('cuentas.index') }}">Cuentas</a></li>
                                 @if(auth()->user()->isAdmin())
+                                <li class="nav-item"><a class="nav-link text-white" href="{{ route('facturas.faltantes') }}">Gastos sin factura</a></li>
+                                <li class="nav-item"><a class="nav-link text-white" href="{{ route('facturas.index') }}">Facturas SAT</a></li>
+                                <li class="nav-item"><a class="nav-link text-white" href="{{ route('contribuyentes.index') }}">Contribuyentes</a></li>
                                 <li class="nav-item"><a class="nav-link text-white" href="{{ route('usuarios.index') }}">Usuarios</a></li>
                                 @endif
                                 <li><hr class="dropdown-divider border-secondary"></li>
