@@ -38,6 +38,28 @@ class Contribuyente extends Model
         return $this->hasMany(Negocio::class);
     }
 
+    // Cuentas asignadas directamente a este RFC
+    public function cuentasPropias()
+    {
+        return $this->hasMany(Cuenta::class);
+    }
+
+    /** Cuentas de este RFC: las asignadas a él y las de sus negocios que no tienen otro RFC. */
+    public function cuentas()
+    {
+        $id = $this->id;
+        return Cuenta::where(fn ($q) => $q->where('contribuyente_id', $id)
+            ->orWhere(fn ($q) => $q->whereNull('contribuyente_id')->whereHas('negocio', fn ($n) => $n->where('contribuyente_id', $id))));
+    }
+
+    /** Gastos que se comparan con las facturas de este RFC: los pagados con sus cuentas. */
+    public function gastos()
+    {
+        $id = $this->id;
+        return Gasto::whereHas('cuenta', fn ($c) => $c->where('contribuyente_id', $id)
+            ->orWhere(fn ($q) => $q->whereNull('contribuyente_id')->whereHas('negocio', fn ($n) => $n->where('contribuyente_id', $id))));
+    }
+
     public function cfdis()
     {
         return $this->hasMany(Cfdi::class);

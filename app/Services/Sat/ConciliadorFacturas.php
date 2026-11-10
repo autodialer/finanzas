@@ -9,7 +9,8 @@ use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
 /**
- * Vincula los gastos de los negocios de un contribuyente con sus facturas recibidas.
+ * Vincula los gastos pagados con las cuentas de un contribuyente con sus facturas recibidas.
+ * No cuentan los gastos marcados sin factura ni los de categorías que no la requieren.
  *
  * Una factura es candidata para un gasto cuando su total en pesos coincide (±$1 o ±0.5%,
  * con o sin la propina) y se emitió entre 10 días antes y 45 días después del gasto (muchos
@@ -76,12 +77,15 @@ class ConciliadorFacturas
 
     public function gastosSinFactura(Contribuyente $contribuyente, ?Carbon $desde = null, ?Carbon $hasta = null)
     {
-        return Gasto::whereIn('negocio_id', $contribuyente->negocios()->pluck('id'))
+        return $contribuyente->gastos()
             ->where('requiere_factura', true)
+            ->whereDoesntHave('categoria', fn ($q) => $q->where('requiere_factura', false))
             ->whereDoesntHave('cfdis')
             ->when($desde, fn ($q) => $q->whereDate('fecha', '>=', $desde))
             ->when($hasta, fn ($q) => $q->whereDate('fecha', '<=', $hasta));
     }
+
+    public const MONTO_MINIMO = 1.0;
 
     public function facturasLibres(Contribuyente $contribuyente)
     {
@@ -89,7 +93,21 @@ class ConciliadorFacturas
             ->where('direccion', 'recibido')
             ->where('tipo', 'I')
             ->where('estado', 'vigente')
+            ->where('total', '>=', self::MONTO_MINIMO)
             ->whereNull('gasto_id');
+    }
+
+    /**
+     * ¿La factura debería tener un gasto? Solo facturas de ingreso vigentes de $1 o más:
+     * las de pago (P), egreso (E, notas de crédito) y las de $0.00/$0.01 (redenciones,
+     * "no existe comisión") no representan un gasto.
+     */
+    public static function requiereGasto(Cfdi $factura): bool
+    {
+        return $factura->direccion === 'recibido'
+            && $factura->tipo === 'I'
+            && $factura->estado === 'vigente'
+            && (float) $factura->total >= self::MONTO_MINIMO;
     }
 
     public function coincide(Gasto $gasto, Cfdi $factura): bool

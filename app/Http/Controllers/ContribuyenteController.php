@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Contribuyente;
+use App\Models\Cuenta;
 use App\Models\Negocio;
 use App\Models\SatSolicitud;
 use App\Services\Sat\ConciliadorFacturas;
@@ -32,7 +33,7 @@ class ContribuyenteController extends Controller
 
     public function create()
     {
-        return view('contribuyentes.create', ['contribuyente' => new Contribuyente(['descarga_automatica' => true]), 'negocios' => $this->negocios()]);
+        return view('contribuyentes.create', ['contribuyente' => new Contribuyente(['descarga_automatica' => true]), 'negocios' => $this->negocios(), 'cuentas' => $this->cuentasLista()]);
     }
 
     public function store(Request $request)
@@ -44,6 +45,7 @@ class ContribuyenteController extends Controller
         $contribuyente = DB::transaction(function () use ($datos, $efirma, $request) {
             $contribuyente = Contribuyente::create($datos);
             $this->asignarNegocios($contribuyente, $request->input('negocios', []));
+            $this->asignarCuentas($contribuyente, $request->input('cuentas', []));
             if ($efirma) {
                 $contribuyente->guardarEfirma(...$efirma);
             }
@@ -55,7 +57,7 @@ class ContribuyenteController extends Controller
 
     public function show(Contribuyente $contribuyente)
     {
-        $contribuyente->load('negocios');
+        $contribuyente->load('negocios', 'cuentasPropias');
         $solicitudes = $contribuyente->solicitudes()->latest('id')->limit(30)->get();
         // Facturas por mes de los últimos 6 meses: [mes => [direccion => [facturas, total]]]
         $resumen = $contribuyente->cfdis()
@@ -71,7 +73,7 @@ class ContribuyenteController extends Controller
 
     public function edit(Contribuyente $contribuyente)
     {
-        return view('contribuyentes.edit', ['contribuyente' => $contribuyente->load('negocios'), 'negocios' => $this->negocios()]);
+        return view('contribuyentes.edit', ['contribuyente' => $contribuyente->load('negocios', 'cuentasPropias'), 'negocios' => $this->negocios(), 'cuentas' => $this->cuentasLista()]);
     }
 
     public function update(Request $request, Contribuyente $contribuyente)
@@ -82,6 +84,7 @@ class ContribuyenteController extends Controller
         DB::transaction(function () use ($contribuyente, $datos, $efirma, $request) {
             $contribuyente->update($datos);
             $this->asignarNegocios($contribuyente, $request->input('negocios', []));
+            $this->asignarCuentas($contribuyente, $request->input('cuentas', []));
             if ($efirma) {
                 $contribuyente->guardarEfirma(...$efirma);
             }
@@ -147,6 +150,8 @@ class ContribuyenteController extends Controller
             'regimen'    => ['nullable', Rule::in(array_keys(Contribuyente::REGIMENES))],
             'negocios'   => 'array',
             'negocios.*' => 'exists:negocios,id',
+            'cuentas'    => 'array',
+            'cuentas.*'  => 'exists:cuentas,id',
             'cer'        => 'nullable|file|max:20',
             'key'        => 'nullable|file|max:20',
             'password'   => 'nullable|string|max:255',
@@ -200,6 +205,17 @@ class ContribuyenteController extends Controller
     {
         Negocio::where('contribuyente_id', $contribuyente->id)->whereNotIn('id', $ids)->update(['contribuyente_id' => null]);
         Negocio::whereIn('id', $ids)->update(['contribuyente_id' => $contribuyente->id]);
+    }
+
+    private function asignarCuentas(Contribuyente $contribuyente, array $ids): void
+    {
+        Cuenta::where('contribuyente_id', $contribuyente->id)->whereNotIn('id', $ids)->update(['contribuyente_id' => null]);
+        Cuenta::whereIn('id', $ids)->update(['contribuyente_id' => $contribuyente->id]);
+    }
+
+    private function cuentasLista()
+    {
+        return Cuenta::with('negocio', 'contribuyente')->orderBy('negocio_id')->orderBy('nombre')->get();
     }
 
     private function negocios()

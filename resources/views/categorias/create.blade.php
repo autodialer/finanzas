@@ -29,6 +29,12 @@
                 </select>
                 @error('tipo') <div class="text-danger small">{{ $message }}</div> @enderror
             </div>
+            <div class="mb-3 form-check">
+                <input type="hidden" name="requiere_factura" value="0">
+                <input type="checkbox" name="requiere_factura" value="1" id="requiereFactura" class="form-check-input" @checked(old('requiere_factura', true))>
+                <label for="requiereFactura" class="form-check-label">Sus gastos requieren factura del proveedor</label>
+                <div class="form-text">Desmárcalo para nómina, impuestos, IMSS, préstamos: no aparecerán en "Gastos sin factura".</div>
+            </div>
             <button type="submit" class="btn btn-primary">Guardar</button>
         </form>
     </div>

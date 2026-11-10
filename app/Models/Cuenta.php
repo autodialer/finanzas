@@ -20,6 +20,12 @@ class Cuenta extends Model
     {
         return $this->belongsTo(Negocio::class);
     }
+    // RFC dueño de la cuenta; si es null, el del negocio
+    public function contribuyente()
+    {
+        return $this->belongsTo(Contribuyente::class);
+    }
+
     public function banco()
     {
         return $this->belongsTo(Banco::class);

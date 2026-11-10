@@ -88,6 +88,8 @@ Route::middleware(['auth', 'es_admin'])->group(function () {
     Route::post('facturas/subir', [\App\Http\Controllers\FacturaController::class, 'subir'])->name('facturas.subir');
     Route::post('facturas/vincular', [\App\Http\Controllers\FacturaController::class, 'vincular'])->name('facturas.vincular');
     Route::post('facturas/conciliar/{contribuyente}', [\App\Http\Controllers\FacturaController::class, 'conciliar'])->name('facturas.conciliar');
+    Route::get('facturas/{cfdi}/crear-gasto', [\App\Http\Controllers\FacturaController::class, 'crearGasto'])->name('facturas.crear-gasto');
+    Route::post('facturas/{cfdi}/crear-gasto', [\App\Http\Controllers\FacturaController::class, 'guardarGasto'])->name('facturas.guardar-gasto');
     Route::get('facturas/{cfdi}/xml', [\App\Http\Controllers\FacturaController::class, 'xml'])->name('facturas.xml');
     Route::post('facturas/{cfdi}/desvincular', [\App\Http\Controllers\FacturaController::class, 'desvincular'])->name('facturas.desvincular');
     Route::post('gastos/{gasto}/sin-factura', [\App\Http\Controllers\FacturaController::class, 'sinFactura'])->name('facturas.sin-factura');

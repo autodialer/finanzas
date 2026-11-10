@@ -95,8 +95,9 @@
                                 @csrf
                                 <button class="btn btn-link btn-sm p-0 text-danger" title="Desvincular"><i class="bi bi-x-circle"></i></button>
                             </form>
-                        @elseif($f->tipo === 'I')
+                        @elseif(\App\Services\Sat\ConciliadorFacturas::requiereGasto($f))
                             <span class="badge bg-warning text-dark">Sin gasto</span>
+                            <a href="{{ route('facturas.crear-gasto', $f) }}" class="btn btn-outline-primary btn-sm py-0 mt-1 d-block text-nowrap"><i class="bi bi-plus-lg"></i> Crear gasto</a>
                         @endif
                     </td>
                     @endif

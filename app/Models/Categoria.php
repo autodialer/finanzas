@@ -7,7 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 class Categoria extends Model
 {
     protected $table = 'categorias';
-    protected $fillable = ['nombre', 'tipo'];
+    protected $fillable = ['nombre', 'tipo', 'requiere_factura'];
+    protected $casts = ['requiere_factura' => 'boolean'];
 
     public function ingresos()
     {

@@ -26,7 +26,7 @@ class CategoriaController extends Controller
             'nombre' => 'required',
             'tipo' => 'required|in:ingreso,gasto,ambos',
         ]);
-        Categoria::create($request->all());
+        Categoria::create($request->only('nombre', 'tipo') + ['requiere_factura' => $request->boolean('requiere_factura', true)]);
         return redirect()->route('categorias.index')->with('exito', 'Categoría creada correctamente.');
     }
 
@@ -41,7 +41,7 @@ class CategoriaController extends Controller
             'nombre' => 'required',
             'tipo' => 'required|in:ingreso,gasto,ambos',
         ]);
-        $categoria->update($request->all());
+        $categoria->update($request->only('nombre', 'tipo') + ['requiere_factura' => $request->boolean('requiere_factura')]);
         return redirect()->route('categorias.index')->with('exito', 'Categoría actualizada correctamente.');
     }
 

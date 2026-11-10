@@ -34,6 +34,9 @@
                         @else
                         <span class="badge bg-secondary">Ambos</span>
                         @endif
+                        @if(!$categoria->requiere_factura)
+                        <span class="badge bg-light text-dark border">Sin factura</span>
+                        @endif
                     </td>
                     <td>
                         <a href="{{ route('categorias.edit', $categoria) }}" class="btn btn-sm btn-warning">

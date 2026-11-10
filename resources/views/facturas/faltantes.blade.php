@@ -42,6 +42,8 @@
     </div>
     <div class="col-md-6 small text-muted">
         Negocios: {{ $contribuyente->negocios->pluck('nombre')->implode(', ') ?: 'ninguno asignado' }}
+        @if($contribuyente->cuentasPropias->isNotEmpty()) · Cuentas: {{ $contribuyente->cuentasPropias->pluck('nombre')->implode(', ') }}@endif
+        <div>No aparecen los gastos de <a href="{{ route('categorias.index') }}">categorías marcadas "sin factura"</a>.</div>
     </div>
 </form>
 

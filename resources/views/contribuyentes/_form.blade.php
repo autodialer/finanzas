@@ -47,6 +47,30 @@
                         @endforeach
                     </div>
                     <div class="col-12">
+                        <label class="form-label">Cuentas de este RFC <span class="text-muted small">(solo si son de un negocio de otro RFC)</span></label>
+                        <div class="form-text mt-0 mb-2">
+                            Por omisión, una cuenta es del RFC de su negocio. Marca aquí las cuentas de esta empresa que están dentro de otro negocio
+                            (por ejemplo, la cuenta Banregio de Systel en el negocio MassiveCaller): sus gastos se buscarán en las facturas de este RFC.
+                        </div>
+                        @php $cuentasElegidas = collect(old('cuentas', $contribuyente->exists ? $contribuyente->cuentasPropias->pluck('id')->all() : []))->map(fn ($id) => (int) $id); @endphp
+                        <div class="border rounded p-2" style="max-height: 220px; overflow-y: auto">
+                            @foreach($cuentas->groupBy(fn ($c) => $c->negocio->nombre ?? '—') as $negocioNombre => $grupo)
+                                <div class="small fw-semibold text-muted mt-1">{{ $negocioNombre }}</div>
+                                @foreach($grupo as $cuenta)
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="cuentas[]" value="{{ $cuenta->id }}" id="cuenta{{ $cuenta->id }}" @checked($cuentasElegidas->contains($cuenta->id))>
+                                        <label class="form-check-label small" for="cuenta{{ $cuenta->id }}">
+                                            {{ $cuenta->nombre }}
+                                            @if($cuenta->contribuyente && $cuenta->contribuyente->id !== $contribuyente->id)
+                                                <span class="text-muted">(hoy de {{ $cuenta->contribuyente->rfc }})</span>
+                                            @endif
+                                        </label>
+                                    </div>
+                                @endforeach
+                            @endforeach
+                        </div>
+                    </div>
+                    <div class="col-12">
                         <div class="form-check form-switch">
                             <input type="hidden" name="descarga_automatica" value="0">
                             <input class="form-check-input" type="checkbox" name="descarga_automatica" value="1" id="descargaAutomatica" @checked(old('descarga_automatica', $contribuyente->descarga_automatica))>

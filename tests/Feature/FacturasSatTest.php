@@ -178,6 +178,95 @@ class FacturasSatTest extends TestCase
         $this->assertSame('tarde', ConciliadorFacturas::fechaLimite($gasto, Carbon::parse('2026-10-20'))['urgencia']);
     }
 
+    public function test_facturas_de_menos_de_un_peso_no_cuentan_como_sin_gasto(): void
+    {
+        $this->subirZip([CfdiFixture::xml(['subtotal' => '0.01', 'iva' => '0.00', 'total' => '0.01'])]);
+        $cfdi = Cfdi::first();
+
+        $this->assertFalse(ConciliadorFacturas::requiereGasto($cfdi));
+        $this->assertSame(0, app(ConciliadorFacturas::class)->facturasLibres($this->moral)->count());
+        $this->get(route('facturas.crear-gasto', $cfdi))->assertSessionHasErrors('vincular');
+    }
+
+    public function test_crear_gasto_desde_la_factura_y_recordar_categoria(): void
+    {
+        $this->subirZip([CfdiFixture::xml(['moneda' => 'USD', 'tipo_cambio' => '20.00'])]);
+        $cfdi = Cfdi::first();
+        $this->assertNull($cfdi->gasto_id);
+
+        $this->get(route('facturas.crear-gasto', $cfdi))->assertOk()->assertSee('GASOLINERA FICTICIA');
+
+        $this->post(route('facturas.guardar-gasto', $cfdi), [
+            'negocio_id'   => $this->negocio->id,
+            'categoria_id' => $this->categoria->id,
+            'cuenta_id'    => $this->cuenta->id,
+            'fecha'        => '2026-09-06',
+            'concepto'     => 'Combustible avión',
+            'forma_pago'   => 'transferencia',
+        ])->assertSessionHasNoErrors();
+
+        $gasto = Gasto::first();
+        $this->assertSame(23200.0, (float) $gasto->monto);   // 1,160 USD × 20
+        $this->assertSame(3200.0, (float) $gasto->monto_iva); // 160 USD × 20
+        $this->assertSame($gasto->id, $cfdi->fresh()->gasto_id);
+        $this->assertSame($this->categoria->id, \App\Models\ReglaCategoria::where('comercio', 'GASOLINERA FICTICIA')->value('categoria_id'));
+
+        // Ya no se puede crear otro gasto con la misma factura
+        $this->post(route('facturas.guardar-gasto', $cfdi), [])->assertSessionHasErrors('vincular');
+        $this->assertSame(1, Gasto::count());
+    }
+
+    public function test_crear_gasto_rechaza_cuenta_de_otro_negocio(): void
+    {
+        $this->subirZip([CfdiFixture::xml()]);
+        $otro = Negocio::create(['nombre' => 'Otro']);
+        $ajena = Cuenta::create(['negocio_id' => $otro->id, 'tipo' => 'banco', 'nombre' => 'Ajena']);
+
+        $this->post(route('facturas.guardar-gasto', Cfdi::first()), [
+            'negocio_id' => $this->negocio->id, 'categoria_id' => $this->categoria->id, 'cuenta_id' => $ajena->id,
+            'fecha' => '2026-09-06', 'concepto' => 'x', 'forma_pago' => 'transferencia',
+        ])->assertSessionHasErrors('cuenta_id');
+        $this->assertSame(0, Gasto::count());
+    }
+
+    public function test_categoria_que_no_requiere_factura_no_aparece_como_pendiente(): void
+    {
+        $nomina = Categoria::create(['nombre' => 'Nómina', 'tipo' => 'gasto', 'requiere_factura' => false]);
+        $this->gasto(5000, '2026-09-15', ['categoria_id' => $nomina->id]);
+        $this->gasto(1160, '2026-09-03');
+
+        $pendientes = app(ConciliadorFacturas::class)->gastosSinFactura($this->moral)->pluck('monto')->map(fn ($m) => (float) $m)->all();
+        $this->assertSame([1160.0], $pendientes);
+    }
+
+    public function test_cuenta_de_otra_empresa_se_concilia_con_las_facturas_de_su_rfc(): void
+    {
+        // Cuenta de "Systel" dentro del negocio de Massivecaller
+        $systel = Contribuyente::create(['rfc' => 'SYS010101AB3', 'nombre' => 'Systel Ficticia', 'tipo' => 'moral']);
+        $cuentaSystel = Cuenta::create(['negocio_id' => $this->negocio->id, 'tipo' => 'banco', 'nombre' => 'Systel - Banregio']);
+        $cuentaSystel->forceFill(['contribuyente_id' => $systel->id])->save();
+
+        $gastoSystel = $this->gasto(1160, '2026-09-03', ['cuenta_id' => $cuentaSystel->id]);
+        $gastoMas    = $this->gasto(580, '2026-09-03');
+
+        $this->assertSame([$gastoSystel->id], $systel->gastos()->pluck('id')->all());
+        $this->assertSame([$gastoMas->id], $this->moral->gastos()->pluck('id')->all());
+
+        // La factura recibida por Systel se vincula con el gasto pagado con su cuenta
+        $this->subirZip([CfdiFixture::xml(['rfc_receptor' => 'SYS010101AB3'])]);
+        $this->assertSame($gastoSystel->id, Cfdi::first()->gasto_id);
+    }
+
+    public function test_asignar_cuentas_a_un_contribuyente(): void
+    {
+        $this->put(route('contribuyentes.update', $this->moral), [
+            'rfc' => 'MAS010101XY2', 'nombre' => 'Empresa Ficticia', 'tipo' => 'moral', 'regimen' => '601',
+            'negocios' => [$this->negocio->id], 'cuentas' => [$this->cuenta->id], 'descarga_automatica' => 1,
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame($this->moral->id, $this->cuenta->fresh()->contribuyente_id);
+    }
+
     public function test_la_efirma_se_guarda_cifrada_y_no_se_expone(): void
     {
         $this->moral->forceFill(['efirma_password' => 'secreta', 'efirma_cer' => base64_encode('cer'), 'efirma_key' => base64_encode('key')])->save();

@@ -21,7 +21,9 @@
             {{ $contribuyente->rfc }} · {{ $contribuyente->tipo === 'moral' ? 'Persona moral' : 'Persona física' }}
             @if($contribuyente->regimen) · {{ $contribuyente->regimen }} {{ $contribuyente->nombreRegimen() }}@endif
         </div>
-        <div class="small text-muted">Negocios: {{ $contribuyente->negocios->pluck('nombre')->implode(', ') ?: 'ninguno (asígnalos para conciliar gastos)' }}</div>
+        <div class="small text-muted">Negocios: {{ $contribuyente->negocios->pluck('nombre')->implode(', ') ?: 'ninguno' }}
+            @if($contribuyente->cuentasPropias->isNotEmpty()) · Cuentas: {{ $contribuyente->cuentasPropias->pluck('nombre')->implode(', ') }}@endif
+        </div>
     </div>
     <div class="d-flex gap-2">
         <a href="{{ route('facturas.index', ['contribuyente_id' => $contribuyente->id]) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-receipt"></i> Facturas</a>
