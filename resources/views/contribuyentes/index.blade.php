@@ -20,7 +20,7 @@
                     <th>RFC</th>
                     <th>Nombre</th>
                     <th>Régimen</th>
-                    <th>Negocios</th>
+                    <th>Negocios / cuentas</th>
                     <th>e.firma</th>
                     <th>Última descarga</th>
                     <th class="text-center">Gastos sin factura<br><span class="small fw-normal">mes pasado y actual</span></th>
@@ -33,7 +33,15 @@
                     <td class="fw-semibold"><a href="{{ route('contribuyentes.show', $c) }}">{{ $c->rfc }}</a></td>
                     <td>{{ $c->nombre }} <span class="badge bg-light text-dark border">{{ $c->tipo === 'moral' ? 'Moral' : 'Física' }}</span></td>
                     <td class="small">{{ $c->regimen }} {{ $c->nombreRegimen() }}</td>
-                    <td class="small">{{ $c->negocios->pluck('nombre')->implode(', ') ?: '—' }}</td>
+                    <td class="small">
+                        @if($c->negocios->isNotEmpty())<div>{{ $c->negocios->pluck('nombre')->implode(', ') }}</div>@endif
+                        @foreach($c->cuentasPropias as $cuenta)
+                            <div class="text-muted"><i class="bi bi-credit-card"></i> {{ $cuenta->nombre }} <span class="small">({{ $cuenta->negocio?->nombre }})</span></div>
+                        @endforeach
+                        @if($c->negocios->isEmpty() && $c->cuentasPropias->isEmpty())
+                            <span class="text-danger">Sin negocios ni cuentas</span>
+                        @endif
+                    </td>
                     <td>
                         @if($c->efirmaVigente())
                             <span class="badge bg-success">Vence {{ $c->efirma_vence->format('d/m/Y') }}</span>

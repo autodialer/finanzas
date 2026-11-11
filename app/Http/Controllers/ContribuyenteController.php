@@ -21,7 +21,7 @@ class ContribuyenteController extends Controller
 {
     public function index(ConciliadorFacturas $conciliador)
     {
-        $contribuyentes = Contribuyente::with('negocios')->withCount('cfdis')->orderBy('nombre')->get();
+        $contribuyentes = Contribuyente::with('negocios', 'cuentasPropias.negocio')->withCount('cfdis')->orderBy('nombre')->get();
 
         $inicioMes = now()->startOfMonth();
         $sinFactura = $contribuyentes->mapWithKeys(fn ($c) => [
